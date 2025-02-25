@@ -14,8 +14,11 @@ public class Device {
     @SerializedName("deviceNumber")
     private String deviceNumber;
 
+    @SerializedName("deviceToken")
+    private String deviceToken;
+
     @SerializedName("deviceOwner")
-    private Organization deviceOwner;
+    private User deviceOwner;
 
     @SerializedName("videoDataSet")
     Set<VideoData> videoDataSet;
@@ -42,13 +45,22 @@ public class Device {
 
     public void setDeviceNumber(String deviceNumber) {
         this.deviceNumber = deviceNumber;
+
     }
 
-    public Organization getDeviceOwner() {
+    public String getDeviceToken() {
+        return deviceToken;
+    }
+
+    public void setDeviceToken(String deviceToken) {
+        this.deviceToken = deviceToken;
+    }
+
+    public User getDeviceOwner() {
         return deviceOwner;
     }
 
-    public void setDeviceOwner(Organization deviceOwner) {
+    public void setDeviceOwner(User deviceOwner) {
         this.deviceOwner = deviceOwner;
     }
 
@@ -59,4 +71,6 @@ public class Device {
     public void setVideoDataSet(Set<VideoData> videoDataSet) {
         this.videoDataSet = videoDataSet;
     }
+
+
 }

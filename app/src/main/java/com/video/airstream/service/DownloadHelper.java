@@ -11,8 +11,8 @@ import android.net.Uri;
 import java.io.File;
 
 public class DownloadHelper {
-    public void beginDownload(Context context, Integer deviceId, String fileName){
-        String url = "http://192.168.1.2:8080/api/video/download/"+ deviceId + "/" + fileName;
+    public void beginDownload(Context context, Integer deviceId, String fileName, String host){
+        String url = host + "/api/video/download/"+ deviceId + "/" + fileName;
         File file=new File(context.getExternalFilesDir("airstream"),fileName);
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url))
                 //.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)

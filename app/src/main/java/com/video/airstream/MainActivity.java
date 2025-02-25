@@ -37,6 +37,7 @@ import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
+    String host;
     private VideoView videoView;
     APIInterface apiInterface;
 
@@ -71,9 +72,9 @@ public class MainActivity extends AppCompatActivity {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
-        apiInterface = APIClient.getClient().create(APIInterface.class);
+        host = getString(R.string.host_path);
+        apiInterface = APIClient.getClient(host).create(APIInterface.class);
         this.videoView = findViewById(R.id.idVideoView);
-        this.setupFirebaseToken();
         this.syncDeviceDetails();
         this.playAllVideo();
     }
@@ -105,6 +106,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<Device> call, Response<Device> response) {
                 Device device = response.body();
+                setupFirebaseToken(device);
                 if (device != null && !device.getVideoDataSet().isEmpty()) {
                     if (videoView.isPlaying()) {
                         videoView.stopPlayback();
@@ -138,7 +140,7 @@ public class MainActivity extends AppCompatActivity {
             fileChecker = object -> Arrays.stream(listOfFileName).noneMatch(filePath -> filePath.contains(object.getVideoName()));
         }
         device.getVideoDataSet().stream().filter(fileChecker).forEach(videoData -> {
-            helper.beginDownload(context, device.getDeviceId(), videoData.getVideoName());
+            helper.beginDownload(context, device.getDeviceId(), videoData.getVideoName(), host);
         });
         playAllVideo();
     }
@@ -164,7 +166,7 @@ public class MainActivity extends AppCompatActivity {
         }, 60000);
     }
 
-    public void setupFirebaseToken() {
+    public void setupFirebaseToken(Device device) {
         FirebaseMessaging.getInstance().getToken()
                 .addOnCompleteListener(task -> {
                     if (!task.isSuccessful()) {
@@ -173,7 +175,27 @@ public class MainActivity extends AppCompatActivity {
                     }
                     // Get new FCM registration token
                     String token = task.getResult();
+                    if(device.getDeviceToken() == null || (device.getDeviceToken() != null && !device.getDeviceToken().equals(token))){
+                        device.setDeviceToken(token);
+                        updateDeviceToken(device);
+                    }
                     Log.d(TAG, token);
-                });
+        });
     }
+
+    public void updateDeviceToken(Device device){
+        Call<Device> deviceTokenUpdateCall = apiInterface.updateDeviceToken(device);
+        deviceTokenUpdateCall.enqueue(new Callback<>() {
+            @Override
+            public void onResponse(Call<Device> call, Response<Device> response) {
+                Log.d(TAG, "Device Token updated");
+            }
+
+            @Override
+            public void onFailure(Call<Device> call, Throwable t) {
+                call.cancel();
+            }
+        });
+    }
+
 }
