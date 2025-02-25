@@ -1,8 +1,14 @@
 package com.video.airstream;
 
+import static android.content.ContentValues.TAG;
+
+import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
-import android.widget.Toast;
+import android.util.Log;
 import android.widget.VideoView;
 
 import androidx.activity.EdgeToEdge;
@@ -11,9 +17,10 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.video.airstream.apiclient.APIClient;
 import com.video.airstream.modal.Device;
-import com.video.airstream.predicate.FileChecker;
+import com.video.airstream.modal.VideoData;
 import com.video.airstream.service.APIInterface;
 import com.video.airstream.service.DownloadHelper;
 import java.io.File;
@@ -22,6 +29,7 @@ import java.util.Objects;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -31,6 +39,27 @@ public class MainActivity extends AppCompatActivity {
 
     private VideoView videoView;
     APIInterface apiInterface;
+
+
+    public BroadcastReceiver myReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            syncDeviceDetails();
+        }
+    };
+
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+    @Override
+    protected void onStart() {
+        super.onStart();
+        registerReceiver(myReceiver, new IntentFilter(Intent.ACTION_SEND));
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        unregisterReceiver(myReceiver);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
         });
         apiInterface = APIClient.getClient().create(APIInterface.class);
         this.videoView = findViewById(R.id.idVideoView);
+        this.setupFirebaseToken();
         this.syncDeviceDetails();
         this.playAllVideo();
     }
@@ -59,7 +89,7 @@ public class MainActivity extends AppCompatActivity {
 
             this.videoView.setOnCompletionListener(mp -> {
                 System.out.println("Video completed");
-                if(currentPosition.getAndIncrement() >= videoLength) {
+                if(currentPosition.incrementAndGet() >= videoLength) {
                     currentPosition.set(0);
                 }
                 videoView.setVideoPath(videoFiles[currentPosition.get()].getAbsolutePath());
@@ -71,12 +101,12 @@ public class MainActivity extends AppCompatActivity {
 
     public void syncDeviceDetails() {
         Call<Device> deviceDetailsCall = apiInterface.getDeviceDetails("192.168.1.8");
-        deviceDetailsCall.enqueue(new Callback<Device>() {
+        deviceDetailsCall.enqueue(new Callback<>() {
             @Override
             public void onResponse(Call<Device> call, Response<Device> response) {
                 Device device = response.body();
-                if(device !=null && !device.getVideoDataSet().isEmpty()) {
-                    if(videoView.isPlaying()) {
+                if (device != null && !device.getVideoDataSet().isEmpty()) {
+                    if (videoView.isPlaying()) {
                         videoView.stopPlayback();
                     }
                     syncLocalVideos(device);
@@ -86,6 +116,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
             }
+
             @Override
             public void onFailure(Call<Device> call, Throwable t) {
                 call.cancel();
@@ -101,10 +132,10 @@ public class MainActivity extends AppCompatActivity {
         if(null != videoDir && null != videoDir.list() && Objects.requireNonNull(videoDir.list()).length > 0) {
             listOfFiles = videoDir.list();
         }
-        FileChecker fileChecker = object -> true;
+        Predicate<VideoData> fileChecker = object -> true;
         if(listOfFiles != null) {
             final String[] listOfFileName = listOfFiles;
-            fileChecker = object -> Arrays.stream(listOfFileName).anyMatch(filePath -> filePath.contains(object.getVideoName()));
+            fileChecker = object -> Arrays.stream(listOfFileName).noneMatch(filePath -> filePath.contains(object.getVideoName()));
         }
         device.getVideoDataSet().stream().filter(fileChecker).forEach(videoData -> {
             helper.beginDownload(context, device.getDeviceId(), videoData.getVideoName());
@@ -131,5 +162,18 @@ public class MainActivity extends AppCompatActivity {
                 syncDeviceDetails();
             }
         }, 60000);
+    }
+
+    public void setupFirebaseToken() {
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) {
+                        Log.w(TAG, "Fetching FCM registration token failed", task.getException());
+                        return;
+                    }
+                    // Get new FCM registration token
+                    String token = task.getResult();
+                    Log.d(TAG, token);
+                });
     }
 }

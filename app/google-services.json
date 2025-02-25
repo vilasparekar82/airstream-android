@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "142764524181",
+    "project_id": "airstream-c6547",
+    "storage_bucket": "airstream-c6547.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:142764524181:android:40dc2c006a52f9adb2119c",
+        "android_client_info": {
+          "package_name": "com.video.airstream"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBOD6gTd8o-SC-rU9f83baBY9uiPkhkvDA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
