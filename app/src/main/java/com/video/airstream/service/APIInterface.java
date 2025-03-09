@@ -11,12 +11,12 @@ import retrofit2.http.PUT;
 import retrofit2.http.Path;
 
 public interface APIInterface {
-   @GET("api/device/{staticIp}")
+   @GET("api/device/android/{staticIp}")
    Call<Device> getDeviceDetails(@Path("staticIp") String staticIp);
 
-   @GET("api/video/download/{deviceId}/{fileName}")
-   Call<Device> downloadVideo(@Path("deviceId") Integer deviceId, @Path("fileName") String fileName);
+   @GET("api/video/android/download/{deviceId}/{videoId}")
+   Call<Device> downloadVideo(@Path("deviceId") Integer deviceId, @Path("videoId") Integer videoId);
 
-   @PUT("api/device")
+   @PUT("api/device/android")
    Call<Device> updateDeviceToken(@Body Device device);
 }

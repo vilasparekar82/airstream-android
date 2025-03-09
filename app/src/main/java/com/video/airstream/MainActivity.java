@@ -2,13 +2,22 @@ package com.video.airstream;
 
 import static android.content.ContentValues.TAG;
 
+import static com.video.airstream.modal.Event.DELETE_ALL_VIDEOS;
+import static com.video.airstream.modal.Event.DELETE_VIDEO;
+import static com.video.airstream.modal.Event.DEVICE_BOOT;
+import static com.video.airstream.modal.Event.UPDATE_VIDEOS;
+import static com.video.airstream.modal.Event.UPLOAD_VIDEOS;
+
 import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.text.format.Formatter;
 import android.util.Log;
+import android.widget.Toast;
 import android.widget.VideoView;
 
 import androidx.activity.EdgeToEdge;
@@ -20,6 +29,7 @@ import androidx.core.view.WindowInsetsCompat;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.video.airstream.apiclient.APIClient;
 import com.video.airstream.modal.Device;
+import com.video.airstream.modal.Event;
 import com.video.airstream.modal.VideoData;
 import com.video.airstream.service.APIInterface;
 import com.video.airstream.service.DownloadHelper;
@@ -37,15 +47,40 @@ import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
+    String downloadEndpoint;
+
     String host;
     private VideoView videoView;
     APIInterface apiInterface;
+    AtomicInteger currentPosition = new AtomicInteger();
+    int videoLength = 0;
+    File[] videoFiles = null;
 
 
     public BroadcastReceiver myReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            syncDeviceDetails();
+            String action = "";
+            if(intent.getAction() !=null) {
+                action = intent.getAction();
+            }
+            switch (action) {
+                case "UPLOAD_VIDEOS":
+                    syncDeviceDetails(UPLOAD_VIDEOS);
+                    break;
+                case "UPDATE_VIDEOS":
+                    syncDeviceDetails(UPDATE_VIDEOS);
+                    break;
+
+                case "DELETE_VIDEO":
+                    syncDeviceDetails(DELETE_VIDEO);
+                    break;
+
+                case "DELETE_ALL_VIDEOS":
+                    syncDeviceDetails(DELETE_ALL_VIDEOS);
+                    break;
+            }
+
         }
     };
 
@@ -53,7 +88,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        registerReceiver(myReceiver, new IntentFilter(Intent.ACTION_SEND));
+        registerReceiver(myReceiver, new IntentFilter(UPDATE_VIDEOS.name()));
+        registerReceiver(myReceiver, new IntentFilter(UPLOAD_VIDEOS.name()));
+        registerReceiver(myReceiver, new IntentFilter(DELETE_VIDEO.name()));
+        registerReceiver(myReceiver, new IntentFilter(DELETE_ALL_VIDEOS.name()));
     }
 
     @Override
@@ -73,47 +111,62 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
         host = getString(R.string.host_path);
+        downloadEndpoint = host + getString(R.string.download_path);
         apiInterface = APIClient.getClient(host).create(APIInterface.class);
         this.videoView = findViewById(R.id.idVideoView);
-        this.syncDeviceDetails();
-        this.playAllVideo();
+        this.syncDeviceDetails(DEVICE_BOOT);
+
+        this.playAllVideo(DEVICE_BOOT);
     }
 
-    public void playAllVideo() {
+    public void playAllVideo(Event event) {
         File videoDir= this.getBaseContext().getExternalFilesDir("airstream");
         if(null != videoDir && videoDir.listFiles() != null && Objects.requireNonNull(videoDir.listFiles()).length > 0) {
-            File[] videoFiles = videoDir.listFiles();
-            int videoLength = videoFiles.length;
-            AtomicInteger currentPosition = new AtomicInteger();
-            this.videoView.setVideoPath(videoFiles[0].getAbsolutePath());
-            this.videoView.start();
-
-            this.videoView.setOnCompletionListener(mp -> {
-                System.out.println("Video completed");
-                if(currentPosition.incrementAndGet() >= videoLength) {
-                    currentPosition.set(0);
+            videoFiles = videoDir.listFiles();
+            videoLength = videoFiles.length;
+            if (!event.equals(UPLOAD_VIDEOS) ) {
+                if(videoView.isPlaying()) {
+                    this.videoView.suspend();
                 }
-                videoView.setVideoPath(videoFiles[currentPosition.get()].getAbsolutePath());
-                videoView.start();
-            });
+
+                this.videoView.setVideoPath(videoFiles[0].getAbsolutePath());
+                this.videoView.start();
+
+                this.videoView.setOnCompletionListener(mp -> {
+                    if(currentPosition.incrementAndGet() >= videoLength) {
+                        currentPosition.set(0);
+                    }
+                    videoView.setVideoPath(videoFiles[currentPosition.get()].getAbsolutePath());
+                    videoView.start();
+                });
+            }
+
+        } else {
+            Toast.makeText(getBaseContext(), "Loading..... No videos available", Toast.LENGTH_LONG).show();
+            callSyncMethod();
         }
 
     }
 
-    public void syncDeviceDetails() {
-        Call<Device> deviceDetailsCall = apiInterface.getDeviceDetails("192.168.1.8");
+    public synchronized void syncDeviceDetails(Event event) {
+        WifiManager wm = (WifiManager) getSystemService(WIFI_SERVICE);
+        String ip = Formatter.formatIpAddress(wm.getConnectionInfo().getIpAddress());
+        Call<Device> deviceDetailsCall = apiInterface.getDeviceDetails(ip);
         deviceDetailsCall.enqueue(new Callback<>() {
             @Override
             public void onResponse(Call<Device> call, Response<Device> response) {
                 Device device = response.body();
                 setupFirebaseToken(device);
-                if (device != null && !device.getVideoDataSet().isEmpty()) {
-                    if (videoView.isPlaying()) {
-                        videoView.stopPlayback();
-                    }
+                if (videoView.isPlaying() && !event.equals(UPLOAD_VIDEOS) ) {
+                    videoView.suspend();
                     syncLocalVideos(device);
+                }
+
+                if (device != null && !device.getVideoDataSet().isEmpty()) {
                     downloadAllVideos(MainActivity.super.getBaseContext(), device);
+                    playAllVideo(event);
                 } else {
+                    Toast.makeText(getBaseContext(), "Loading..... No videos available", Toast.LENGTH_LONG).show();
                     callSyncMethod();
                 }
 
@@ -140,9 +193,9 @@ public class MainActivity extends AppCompatActivity {
             fileChecker = object -> Arrays.stream(listOfFileName).noneMatch(filePath -> filePath.contains(object.getVideoName()));
         }
         device.getVideoDataSet().stream().filter(fileChecker).forEach(videoData -> {
-            helper.beginDownload(context, device.getDeviceId(), videoData.getVideoName(), host);
+            helper.beginDownload(context, device.getDeviceId(), videoData, downloadEndpoint);
         });
-        playAllVideo();
+
     }
 
     public void syncLocalVideos(Device device) {
@@ -161,7 +214,7 @@ public class MainActivity extends AppCompatActivity {
         new Timer().schedule(new TimerTask() {
             @Override
             public void run() {
-                syncDeviceDetails();
+                syncDeviceDetails(DEVICE_BOOT);
             }
         }, 60000);
     }

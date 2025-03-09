@@ -8,16 +8,17 @@ import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 
+import com.video.airstream.modal.VideoData;
+
 import java.io.File;
 
 public class DownloadHelper {
-    public void beginDownload(Context context, Integer deviceId, String fileName, String host){
-        String url = host + "/api/video/download/"+ deviceId + "/" + fileName;
-        File file=new File(context.getExternalFilesDir("airstream"),fileName);
+    public void beginDownload(Context context, Integer deviceId, VideoData videoData, String endpoint){
+        String url = endpoint + deviceId + "/" + videoData.getVideoId();
+        File file=new File(context.getExternalFilesDir("airstream"),videoData.getVideoName());
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url))
-                //.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
                 .setDestinationUri(Uri.fromFile(file))
-                .setTitle(fileName)
+                .setTitle(videoData.getVideoName())
                 .setDescription("Downloading")
                 .setRequiresCharging(false)
                 .setAllowedOverMetered(true)

@@ -13,7 +13,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     public void onMessageReceived(RemoteMessage remoteMessage) {
         Map<String, String> eventMap = remoteMessage.getData();
         if(eventMap.get("event") != null) {
-            this.sendBroadcast(new Intent(Intent.ACTION_SEND));
+            this.sendBroadcast(new Intent(eventMap.get("event")));
         }
     }
 }
