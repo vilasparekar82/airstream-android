@@ -69,16 +69,11 @@ public class MainActivity extends AppCompatActivity {
                     syncDeviceDetails(UPLOAD_VIDEOS);
                     break;
                 case "UPDATE_VIDEOS":
+                case "DELETE_VIDEO":
+                case "DELETE_ALL_VIDEOS":
                     syncDeviceDetails(UPDATE_VIDEOS);
                     break;
 
-                case "DELETE_VIDEO":
-                    syncDeviceDetails(DELETE_VIDEO);
-                    break;
-
-                case "DELETE_ALL_VIDEOS":
-                    syncDeviceDetails(DELETE_ALL_VIDEOS);
-                    break;
             }
 
         }
@@ -166,6 +161,10 @@ public class MainActivity extends AppCompatActivity {
                     downloadAllVideos(MainActivity.super.getBaseContext(), device);
                     playAllVideo(event);
                 } else {
+                    if(device != null) {
+                        syncLocalVideos(device);
+                    }
+
                     Toast.makeText(getBaseContext(), "Loading..... No videos available", Toast.LENGTH_LONG).show();
                     callSyncMethod();
                 }
