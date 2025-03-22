@@ -13,6 +13,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.media.MediaPlayer;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.text.format.Formatter;
@@ -109,9 +110,12 @@ public class MainActivity extends AppCompatActivity {
         downloadEndpoint = host + getString(R.string.download_path);
         apiInterface = APIClient.getClient(host).create(APIInterface.class);
         this.videoView = findViewById(R.id.idVideoView);
-        this.syncDeviceDetails(DEVICE_BOOT);
-
-        this.playAllVideo(DEVICE_BOOT);
+        this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
+        this.videoView.start();
+        this.videoView.setOnCompletionListener(mp -> {
+            this.playAllVideo(DEVICE_BOOT);
+            this.syncDeviceDetails(DEVICE_BOOT);
+        });
     }
 
     public void playAllVideo(Event event) {
@@ -134,9 +138,17 @@ public class MainActivity extends AppCompatActivity {
                     videoView.setVideoPath(videoFiles[currentPosition.get()].getAbsolutePath());
                     videoView.start();
                 });
+                this.videoView.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                    @Override
+                    public boolean onError(MediaPlayer mp, int what, int extra) {
+                          videoView.stopPlayback();
+                          return true;
+                    }
+                });
             }
 
         } else {
+            this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
             Toast.makeText(getBaseContext(), "Loading..... No videos available", Toast.LENGTH_LONG).show();
             callSyncMethod();
         }
@@ -151,10 +163,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<Device> call, Response<Device> response) {
                 Device device = response.body();
-                setupFirebaseToken(device);
-                if (videoView.isPlaying() && !event.equals(UPLOAD_VIDEOS) ) {
+                if (device != null && videoView.isPlaying() && !event.equals(UPLOAD_VIDEOS) ) {
                     videoView.suspend();
                     syncLocalVideos(device);
+                    setupFirebaseToken(device);
                 }
 
                 if (device != null && !device.getVideoDataSet().isEmpty()) {
@@ -164,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
                     if(device != null) {
                         syncLocalVideos(device);
                     }
-
+                    videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
                     Toast.makeText(getBaseContext(), "Loading..... No videos available", Toast.LENGTH_LONG).show();
                     callSyncMethod();
                 }
