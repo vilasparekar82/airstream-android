@@ -5,6 +5,7 @@ import static android.content.ContentValues.TAG;
 import static com.video.airstream.modal.Event.DELETE_ALL_VIDEOS;
 import static com.video.airstream.modal.Event.DELETE_VIDEO;
 import static com.video.airstream.modal.Event.DEVICE_BOOT;
+import static com.video.airstream.modal.Event.LOG_DETAILS;
 import static com.video.airstream.modal.Event.UPDATE_VIDEOS;
 import static com.video.airstream.modal.Event.UPLOAD_VIDEOS;
 
@@ -13,9 +14,12 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.icu.text.SimpleDateFormat;
+import android.icu.util.Calendar;
 import android.media.MediaPlayer;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.os.FileUtils;
 import android.text.format.Formatter;
 import android.util.Log;
 import android.widget.Toast;
@@ -34,14 +38,23 @@ import com.video.airstream.modal.Event;
 import com.video.airstream.modal.VideoData;
 import com.video.airstream.service.APIInterface;
 import com.video.airstream.service.DownloadHelper;
+import com.video.airstream.service.LogInformation;
+
+import java.io.BufferedWriter;
 import java.io.File;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Objects;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -49,7 +62,7 @@ import retrofit2.Response;
 public class MainActivity extends AppCompatActivity {
 
     String downloadEndpoint;
-
+    String ipAddress;
     String host;
     private VideoView videoView;
     APIInterface apiInterface;
@@ -75,6 +88,9 @@ public class MainActivity extends AppCompatActivity {
                     syncDeviceDetails(UPDATE_VIDEOS);
                     break;
 
+                case "LOG_DETAILS":
+                    sendLogDetails();
+
             }
 
         }
@@ -88,6 +104,7 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(myReceiver, new IntentFilter(UPLOAD_VIDEOS.name()));
         registerReceiver(myReceiver, new IntentFilter(DELETE_VIDEO.name()));
         registerReceiver(myReceiver, new IntentFilter(DELETE_ALL_VIDEOS.name()));
+        registerReceiver(myReceiver, new IntentFilter(LOG_DETAILS.name()));
     }
 
     @Override
@@ -99,6 +116,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        WifiManager wm = (WifiManager) getSystemService(WIFI_SERVICE);
+        ipAddress = Formatter.formatIpAddress(wm.getConnectionInfo().getIpAddress());
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -114,7 +133,13 @@ public class MainActivity extends AppCompatActivity {
         this.videoView.start();
         this.videoView.setOnCompletionListener(mp -> {
             this.playAllVideo(DEVICE_BOOT);
-            this.syncDeviceDetails(DEVICE_BOOT);
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    syncDeviceDetails(DEVICE_BOOT);
+                }
+            }).start();
+
         });
     }
 
@@ -130,13 +155,16 @@ public class MainActivity extends AppCompatActivity {
 
                 this.videoView.setVideoPath(videoFiles[0].getAbsolutePath());
                 this.videoView.start();
-
+                LogInformation.appendLog(ipAddress, videoFiles[0].getName()  + " " + LocalDateTime.now());
+                System.out.println(videoFiles[0].getName()  + " " + LocalDateTime.now());
                 this.videoView.setOnCompletionListener(mp -> {
                     if(currentPosition.incrementAndGet() >= videoLength) {
                         currentPosition.set(0);
                     }
                     videoView.setVideoPath(videoFiles[currentPosition.get()].getAbsolutePath());
                     videoView.start();
+                    LogInformation.appendLog(ipAddress, videoFiles[currentPosition.get()].getName()  + " " + LocalDateTime.now());
+                    System.out.println(videoFiles[currentPosition.get()].getName() + " " + LocalDateTime.now());
                 });
                 this.videoView.setOnErrorListener(new MediaPlayer.OnErrorListener() {
                     @Override
@@ -155,10 +183,9 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+
     public synchronized void syncDeviceDetails(Event event) {
-        WifiManager wm = (WifiManager) getSystemService(WIFI_SERVICE);
-        String ip = Formatter.formatIpAddress(wm.getConnectionInfo().getIpAddress());
-        Call<Device> deviceDetailsCall = apiInterface.getDeviceDetails(ip);
+        Call<Device> deviceDetailsCall = apiInterface.getDeviceDetails(ipAddress);
         deviceDetailsCall.enqueue(new Callback<>() {
             @Override
             public void onResponse(Call<Device> call, Response<Device> response) {
@@ -260,6 +287,32 @@ public class MainActivity extends AppCompatActivity {
                 call.cancel();
             }
         });
+    }
+
+    public void sendLogDetails(){
+        BufferedWriter buf = null;
+        Date todayDate = Calendar.getInstance().getTime();
+        SimpleDateFormat formatter = new SimpleDateFormat("YYYY-MM-DD");
+        String todayString = formatter.format(todayDate);
+        File logFile = new File("sdcard/log_airstream_" + ipAddress + "_" +todayString + ".file");
+        RequestBody requestFile = RequestBody.create(MediaType.parse("text/plain"), logFile);
+
+        MultipartBody.Part body =
+                MultipartBody.Part.createFormData("logFile", logFile.getName(), requestFile);
+        Call<String> uploadDeviceLog = apiInterface.upload(body);
+        uploadDeviceLog.enqueue(new Callback<String>() {
+            @Override
+            public void onResponse(Call<String> call,
+                                   Response<String> response) {
+                Log.v("Upload", "success");
+            }
+
+            @Override
+            public void onFailure(Call<String> call, Throwable t) {
+                Log.e("Upload error:", t.getMessage());
+            }
+        });
+
     }
 
 }

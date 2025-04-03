@@ -5,5 +5,6 @@ public enum Event {
     DEVICE_BOOT,
     UPDATE_VIDEOS,
     DELETE_VIDEO,
-    DELETE_ALL_VIDEOS
+    DELETE_ALL_VIDEOS,
+    LOG_DETAILS
 }
