@@ -1,7 +1,5 @@
 package com.video.airstream;
 
-import static android.content.ContentValues.TAG;
-
 import static com.video.airstream.modal.Event.DELETE_ALL_VIDEOS;
 import static com.video.airstream.modal.Event.DELETE_VIDEO;
 import static com.video.airstream.modal.Event.DEVICE_BOOT;
@@ -15,14 +13,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.icu.text.SimpleDateFormat;
-import android.icu.util.Calendar;
 import android.media.MediaPlayer;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
-import android.os.FileUtils;
 import android.text.format.Formatter;
-import android.util.Log;
 import android.widget.Toast;
 import android.widget.VideoView;
 
@@ -32,34 +26,13 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.google.firebase.messaging.FirebaseMessaging;
-import com.video.airstream.apiclient.APIClient;
-import com.video.airstream.modal.Device;
 import com.video.airstream.modal.Event;
-import com.video.airstream.modal.VideoData;
-import com.video.airstream.service.APIInterface;
-import com.video.airstream.service.DownloadHelper;
 import com.video.airstream.service.LogInformation;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.Date;
 import java.util.Objects;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Predicate;
-
-import okhttp3.MediaType;
-import okhttp3.MultipartBody;
-import okhttp3.RequestBody;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
     private VideoView videoView;
@@ -105,11 +78,18 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(myReceiver, new IntentFilter(DELETE_ALL_VIDEOS.name()));
         registerReceiver(myReceiver, new IntentFilter(LOG_DETAILS.name()));
         registerReceiver(myReceiver, new IntentFilter(PLAY_ALL.name()));
+        this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
+        this.videoView.start();
+        this.videoView.setOnCompletionListener(mp -> {
+            this.playAllVideo(DEVICE_BOOT);
+            deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
+        });
     }
 
     @Override
     protected void onStop() {
         super.onStop();
+        this.videoView.stopPlayback();
         unregisterReceiver(myReceiver);
     }
 
@@ -127,12 +107,12 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
         this.videoView = findViewById(R.id.idVideoView);
-        this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
-        this.videoView.start();
-        this.videoView.setOnCompletionListener(mp -> {
-            this.playAllVideo(DEVICE_BOOT);
-            deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
-        });
+
+    }
+
+    @Override
+    public void onPostResume(){
+        super.onPostResume();
     }
 
     public void playAllVideo(Event event) {
