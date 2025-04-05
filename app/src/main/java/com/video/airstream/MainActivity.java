@@ -6,6 +6,7 @@ import static com.video.airstream.modal.Event.DELETE_ALL_VIDEOS;
 import static com.video.airstream.modal.Event.DELETE_VIDEO;
 import static com.video.airstream.modal.Event.DEVICE_BOOT;
 import static com.video.airstream.modal.Event.LOG_DETAILS;
+import static com.video.airstream.modal.Event.PLAY_ALL;
 import static com.video.airstream.modal.Event.UPDATE_VIDEOS;
 import static com.video.airstream.modal.Event.UPLOAD_VIDEOS;
 
@@ -49,6 +50,7 @@ import java.util.Date;
 import java.util.Objects;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
@@ -60,15 +62,13 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
-
-    String downloadEndpoint;
-    String ipAddress;
-    String host;
     private VideoView videoView;
-    APIInterface apiInterface;
     AtomicInteger currentPosition = new AtomicInteger();
     int videoLength = 0;
     File[] videoFiles = null;
+    DeviceAsyncTask deviceAsyncTask;
+
+    String ipAddress;
 
 
     public BroadcastReceiver myReceiver = new BroadcastReceiver() {
@@ -80,16 +80,15 @@ public class MainActivity extends AppCompatActivity {
             }
             switch (action) {
                 case "UPLOAD_VIDEOS":
-                    syncDeviceDetails(UPLOAD_VIDEOS);
-                    break;
                 case "UPDATE_VIDEOS":
                 case "DELETE_VIDEO":
                 case "DELETE_ALL_VIDEOS":
-                    syncDeviceDetails(UPDATE_VIDEOS);
+                    deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
                     break;
-
+                case "PLAY_ALL":
+                    playAllVideo(DEVICE_BOOT);
                 case "LOG_DETAILS":
-                    sendLogDetails();
+                    deviceAsyncTask.sendLogDetails();
 
             }
 
@@ -105,6 +104,7 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(myReceiver, new IntentFilter(DELETE_VIDEO.name()));
         registerReceiver(myReceiver, new IntentFilter(DELETE_ALL_VIDEOS.name()));
         registerReceiver(myReceiver, new IntentFilter(LOG_DETAILS.name()));
+        registerReceiver(myReceiver, new IntentFilter(PLAY_ALL.name()));
     }
 
     @Override
@@ -116,6 +116,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        deviceAsyncTask = new DeviceAsyncTask(this);
         WifiManager wm = (WifiManager) getSystemService(WIFI_SERVICE);
         ipAddress = Formatter.formatIpAddress(wm.getConnectionInfo().getIpAddress());
         EdgeToEdge.enable(this);
@@ -125,21 +126,12 @@ public class MainActivity extends AppCompatActivity {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
-        host = getString(R.string.host_path);
-        downloadEndpoint = host + getString(R.string.download_path);
-        apiInterface = APIClient.getClient(host).create(APIInterface.class);
         this.videoView = findViewById(R.id.idVideoView);
         this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
         this.videoView.start();
         this.videoView.setOnCompletionListener(mp -> {
             this.playAllVideo(DEVICE_BOOT);
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    syncDeviceDetails(DEVICE_BOOT);
-                }
-            }).start();
-
+            deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
         });
     }
 
@@ -170,6 +162,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public boolean onError(MediaPlayer mp, int what, int extra) {
                           videoView.stopPlayback();
+                          playAllVideo(DEVICE_BOOT);
                           return true;
                     }
                 });
@@ -178,140 +171,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
             Toast.makeText(getBaseContext(), "Loading..... No videos available", Toast.LENGTH_LONG).show();
-            callSyncMethod();
         }
-
-    }
-
-
-    public synchronized void syncDeviceDetails(Event event) {
-        Call<Device> deviceDetailsCall = apiInterface.getDeviceDetails(ipAddress);
-        deviceDetailsCall.enqueue(new Callback<>() {
-            @Override
-            public void onResponse(Call<Device> call, Response<Device> response) {
-                Device device = response.body();
-                if (device != null && videoView.isPlaying() && !event.equals(UPLOAD_VIDEOS) ) {
-                    videoView.suspend();
-                    syncLocalVideos(device);
-                    setupFirebaseToken(device);
-                }
-
-                if (device != null && !device.getVideoDataSet().isEmpty()) {
-                    downloadAllVideos(MainActivity.super.getBaseContext(), device);
-                    playAllVideo(event);
-                } else {
-                    if(device != null) {
-                        syncLocalVideos(device);
-                    }
-                    videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
-                    Toast.makeText(getBaseContext(), "Loading..... No videos available", Toast.LENGTH_LONG).show();
-                    callSyncMethod();
-                }
-
-            }
-
-            @Override
-            public void onFailure(Call<Device> call, Throwable t) {
-                call.cancel();
-                callSyncMethod();
-            }
-        });
-    }
-
-    public void downloadAllVideos(Context context, Device device){
-        DownloadHelper helper = new DownloadHelper();
-        File videoDir = this.getBaseContext().getExternalFilesDir("airstream");
-        String [] listOfFiles = null;
-        if(null != videoDir && null != videoDir.list() && Objects.requireNonNull(videoDir.list()).length > 0) {
-            listOfFiles = videoDir.list();
-        }
-        Predicate<VideoData> fileChecker = object -> true;
-        if(listOfFiles != null) {
-            final String[] listOfFileName = listOfFiles;
-            fileChecker = object -> Arrays.stream(listOfFileName).noneMatch(filePath -> filePath.contains(object.getVideoName()));
-        }
-        device.getVideoDataSet().stream().filter(fileChecker).forEach(videoData -> {
-            helper.beginDownload(context, device.getDeviceId(), videoData, downloadEndpoint);
-        });
-
-    }
-
-    public void syncLocalVideos(Device device) {
-        File videoDir = this.getBaseContext().getExternalFilesDir("airstream");
-        if(null != videoDir && null != videoDir.listFiles() && Objects.requireNonNull(videoDir.listFiles()).length > 0) {
-            Arrays.stream(Objects.requireNonNull(videoDir.listFiles())).forEach(video -> {
-                long videoCount = device.getVideoDataSet().stream().filter(videoData -> video.getName().contains(videoData.getVideoName())).count();
-                if(videoCount == 0) {
-                    video.delete();
-                }
-            });
-        }
-    }
-
-    public void callSyncMethod(){
-        new Timer().schedule(new TimerTask() {
-            @Override
-            public void run() {
-                syncDeviceDetails(DEVICE_BOOT);
-            }
-        }, 60000);
-    }
-
-    public void setupFirebaseToken(Device device) {
-        FirebaseMessaging.getInstance().getToken()
-                .addOnCompleteListener(task -> {
-                    if (!task.isSuccessful()) {
-                        Log.w(TAG, "Fetching FCM registration token failed", task.getException());
-                        return;
-                    }
-                    // Get new FCM registration token
-                    String token = task.getResult();
-                    if(device.getDeviceToken() == null || (device.getDeviceToken() != null && !device.getDeviceToken().equals(token))){
-                        device.setDeviceToken(token);
-                        updateDeviceToken(device);
-                    }
-                    Log.d(TAG, token);
-        });
-    }
-
-    public void updateDeviceToken(Device device){
-        Call<Device> deviceTokenUpdateCall = apiInterface.updateDeviceToken(device);
-        deviceTokenUpdateCall.enqueue(new Callback<>() {
-            @Override
-            public void onResponse(Call<Device> call, Response<Device> response) {
-                Log.d(TAG, "Device Token updated");
-            }
-
-            @Override
-            public void onFailure(Call<Device> call, Throwable t) {
-                call.cancel();
-            }
-        });
-    }
-
-    public void sendLogDetails(){
-        BufferedWriter buf = null;
-        Date todayDate = Calendar.getInstance().getTime();
-        SimpleDateFormat formatter = new SimpleDateFormat("YYYY-MM-DD");
-        String todayString = formatter.format(todayDate);
-        File logFile = new File("sdcard/log_airstream_" + ipAddress + "_" +todayString + ".file");
-        RequestBody requestFile = RequestBody.create(MediaType.parse("text/plain"), logFile);
-
-        MultipartBody.Part body =
-                MultipartBody.Part.createFormData("logFile", logFile.getName(), requestFile);
-        Call<String> uploadDeviceLog = apiInterface.upload(body);
-        uploadDeviceLog.enqueue(new Callback<String>() {
-            @Override
-            public void onResponse(Call<String> call,
-                                   Response<String> response) {
-                Log.v("Upload", "success");
-            }
-
-            @Override
-            public void onFailure(Call<String> call, Throwable t) {
-                Log.e("Upload error:", t.getMessage());
-            }
-        });
 
     }
 

@@ -13,9 +13,9 @@ import com.video.airstream.modal.VideoData;
 import java.io.File;
 
 public class DownloadHelper {
-    public void beginDownload(Context context, Integer deviceId, VideoData videoData, String endpoint){
+    public void beginDownload(File videoDir, Integer deviceId, VideoData videoData, String endpoint, DownloadManager downloadManager){
         String url = endpoint + deviceId + "/" + videoData.getVideoId();
-        File file=new File(context.getExternalFilesDir("airstream"),videoData.getVideoName());
+        File file=new File(videoDir,videoData.getVideoName());
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url))
                 .setDestinationUri(Uri.fromFile(file))
                 .setTitle(videoData.getVideoName())
@@ -23,7 +23,6 @@ public class DownloadHelper {
                 .setRequiresCharging(false)
                 .setAllowedOverMetered(true)
                 .setAllowedOverRoaming(true);
-        DownloadManager downloadManager= (DownloadManager) context.getSystemService(DOWNLOAD_SERVICE);
         long downloadID = downloadManager.enqueue(request);
 
         // using query method

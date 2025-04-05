@@ -6,5 +6,7 @@ public enum Event {
     UPDATE_VIDEOS,
     DELETE_VIDEO,
     DELETE_ALL_VIDEOS,
-    LOG_DETAILS
+    LOG_DETAILS,
+
+    PLAY_ALL
 }
