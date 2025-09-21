@@ -15,8 +15,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.MediaPlayer;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.Bundle;
-import android.text.format.Formatter;
 import android.widget.Toast;
 import android.widget.VideoView;
 
@@ -30,6 +30,7 @@ import com.video.airstream.modal.Event;
 import com.video.airstream.service.LogInformation;
 
 import java.io.File;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,7 +42,7 @@ public class MainActivity extends AppCompatActivity {
     File[] videoFiles = null;
     DeviceAsyncTask deviceAsyncTask;
 
-    String ipAddress;
+    String serialNumber;
 
 
     public BroadcastReceiver myReceiver = new BroadcastReceiver() {
@@ -60,8 +61,6 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case "PLAY_ALL":
                     playAllVideo(DEVICE_BOOT);
-                case "LOG_DETAILS":
-                    deviceAsyncTask.sendLogDetails();
 
             }
 
@@ -96,9 +95,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        serialNumber = getSerialNumber();
         deviceAsyncTask = new DeviceAsyncTask(this);
-        WifiManager wm = (WifiManager) getSystemService(WIFI_SERVICE);
-        ipAddress = Formatter.formatIpAddress(wm.getConnectionInfo().getIpAddress());
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -107,7 +105,6 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
         this.videoView = findViewById(R.id.idVideoView);
-
     }
 
     @Override
@@ -119,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
         File videoDir= this.getBaseContext().getExternalFilesDir("airstream");
         if(null != videoDir && videoDir.listFiles() != null && Objects.requireNonNull(videoDir.listFiles()).length > 0) {
             videoFiles = videoDir.listFiles();
-            videoLength = videoFiles.length;
+            videoLength = videoFiles != null ? videoFiles.length : 0;
             if (!event.equals(UPLOAD_VIDEOS) ) {
                 if(videoView.isPlaying()) {
                     this.videoView.suspend();
@@ -127,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
 
                 this.videoView.setVideoPath(videoFiles[0].getAbsolutePath());
                 this.videoView.start();
-                LogInformation.appendLog(ipAddress, videoFiles[0].getName()  + " " + LocalDateTime.now());
+                LogInformation.appendLog(serialNumber, videoFiles[0].getName()  + " " + LocalDateTime.now());
                 System.out.println(videoFiles[0].getName()  + " " + LocalDateTime.now());
                 this.videoView.setOnCompletionListener(mp -> {
                     if(currentPosition.incrementAndGet() >= videoLength) {
@@ -135,16 +132,13 @@ public class MainActivity extends AppCompatActivity {
                     }
                     videoView.setVideoPath(videoFiles[currentPosition.get()].getAbsolutePath());
                     videoView.start();
-                    LogInformation.appendLog(ipAddress, videoFiles[currentPosition.get()].getName()  + " " + LocalDateTime.now());
+                    LogInformation.appendLog(serialNumber, videoFiles[currentPosition.get()].getName()  + " " + LocalDateTime.now());
                     System.out.println(videoFiles[currentPosition.get()].getName() + " " + LocalDateTime.now());
                 });
-                this.videoView.setOnErrorListener(new MediaPlayer.OnErrorListener() {
-                    @Override
-                    public boolean onError(MediaPlayer mp, int what, int extra) {
-                          videoView.stopPlayback();
-                          playAllVideo(DEVICE_BOOT);
-                          return true;
-                    }
+                this.videoView.setOnErrorListener((mp, what, extra) -> {
+                      videoView.stopPlayback();
+                      playAllVideo(DEVICE_BOOT);
+                      return true;
                 });
             }
 
@@ -154,5 +148,33 @@ public class MainActivity extends AppCompatActivity {
         }
 
     }
+
+    public static String getSerialNumber() {
+        String serialNumber;
+
+        try {
+            Class<?> c = Class.forName("android.os.SystemProperties");
+            Method get = c.getMethod("get", String.class);
+
+            serialNumber = (String) get.invoke(c, "gsm.sn1");
+            if (serialNumber != null && serialNumber.isEmpty())
+                serialNumber = (String) get.invoke(c, "ril.serialnumber");
+            if (serialNumber != null && serialNumber.isEmpty())
+                serialNumber = (String) get.invoke(c, "ro.serialno");
+            if (serialNumber != null && serialNumber.isEmpty())
+                serialNumber = (String) get.invoke(c, "sys.serialnumber");
+            if (serialNumber != null && serialNumber.isEmpty())
+                serialNumber = Build.getSerial();
+
+            // If none of the methods above worked
+            if (serialNumber.equals(""))
+                serialNumber = null;
+        } catch (Exception e) {
+            serialNumber = null;
+        }
+
+        return serialNumber;
+    }
+
 
 }
