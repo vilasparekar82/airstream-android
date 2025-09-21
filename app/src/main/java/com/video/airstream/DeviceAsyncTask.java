@@ -69,11 +69,11 @@ public class DeviceAsyncTask  {
                         downloadAllVideos(device);
                         activity.sendBroadcast(new Intent(Event.PLAY_ALL.name()));
                     } else {
+                        Toast.makeText(activity.getBaseContext(), "Loading..... No videos available",Toast.LENGTH_LONG).show();
                         callSyncMethod();
                     }
                 } else {
                     Toast.makeText(activity.getBaseContext(), "Device is not registered. Please register your device in admin portal",Toast.LENGTH_LONG).show();
-                    call.cancel();
                     callSyncMethod();
                 }
                 Log.v(TAG, "Device details api: " + device.toString());
