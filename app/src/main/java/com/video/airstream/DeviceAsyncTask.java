@@ -138,6 +138,8 @@ public class DeviceAsyncTask  {
                     if(device.getDeviceToken() == null || (device.getDeviceToken() != null && !device.getDeviceToken().equals(token))){
                         device.setDeviceToken(token);
                         updateDeviceToken(device);
+                    } else {
+                        updateDeviceStatus(device);
                     }
                     Log.d(TAG, token);
                 });
@@ -156,6 +158,15 @@ public class DeviceAsyncTask  {
                 call.cancel();
             }
         });
+    }
+
+    public void updateDeviceStatus(Device device){
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                updateDeviceToken(device);
+            }
+        }, 120000);
     }
 
 }
