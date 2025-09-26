@@ -10,16 +10,20 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.gson.GsonBuilder;
 import com.video.airstream.apiclient.APIClient;
 import com.video.airstream.modal.Device;
 import com.video.airstream.modal.Event;
+import com.video.airstream.modal.LiveUrl;
 import com.video.airstream.modal.VideoData;
 import com.video.airstream.service.APIInterface;
 import com.video.airstream.service.DownloadHelper;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.function.Predicate;
@@ -54,24 +58,40 @@ public class DeviceAsyncTask  {
         new Thread(() -> syncDeviceDetails(event)).start();
     }
 
+
     public void syncDeviceDetails(Event event) {
         Call<Device> deviceDetailsCall = apiInterface.getDeviceDetails(serialNumber);
-        Log.v(TAG, "Device serial: " + serialNumber); 
+        Log.v(TAG, "Device serial: " + serialNumber);
         deviceDetailsCall.enqueue(new retrofit2.Callback<>() {
             @Override
             public void onResponse(Call<Device> call, Response<Device> response) {
                 Device device = response.body();
                 if(null != device && null != device.getDeviceId()) {
-                    syncLocalVideos(device);
+                    boolean liveActive = false;
                     setupFirebaseToken(device);
-
-                    if (!device.getVideoDataSet().isEmpty()) {
-                        downloadAllVideos(device);
-                        activity.sendBroadcast(new Intent(Event.PLAY_ALL.name()));
-                    } else {
-                        Toast.makeText(activity.getBaseContext(), "Loading..... No videos available",Toast.LENGTH_LONG).show();
-                        callSyncMethod();
+                    if (!device.getLiveUrlDataSet().isEmpty()) {
+                        Optional<String> liveUrl = device.getLiveUrlDataSet().stream().filter(liveUrlObj -> liveUrlObj.getLiveStatus().equalsIgnoreCase("Active"))
+                                .map(LiveUrl::getLiveUrl).findFirst();
+                        if(!liveUrl.isEmpty()) {
+                            liveActive = true;
+                            Intent i = new Intent(Event.PLAY_LIVE_URL.name());
+                            i.putExtra(Event.PLAY_LIVE_URL.name(), liveUrl.get());
+                            activity.sendBroadcast(i);
+                        }
                     }
+
+                    if(!liveActive) {
+                        syncLocalVideos(device);
+
+                        if (!device.getVideoDataSet().isEmpty()) {
+                            downloadAllVideos(device);
+                            activity.sendBroadcast(new Intent(Event.PLAY_ALL.name()));
+                        } else {
+                            Toast.makeText(activity.getBaseContext(), "Loading..... No videos available",Toast.LENGTH_LONG).show();
+                            callSyncMethod();
+                        }
+                    }
+
                 } else {
                     Toast.makeText(activity.getBaseContext(), "Device is not registered. Please register your device in admin portal",Toast.LENGTH_LONG).show();
                     callSyncMethod();

@@ -7,6 +7,9 @@ public enum Event {
     DELETE_VIDEO,
     DELETE_ALL_VIDEOS,
     LOG_DETAILS,
+    PLAY_ALL,
+    LIVE_URL_START,
 
-    PLAY_ALL
+    LIVE_URL_STOP,
+    PLAY_LIVE_URL
 }

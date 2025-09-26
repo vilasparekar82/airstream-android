@@ -1,15 +1,19 @@
 package com.video.airstream.modal;
 
+import java.util.Date;
 import java.util.Set;
+
+import com.google.gson.annotations.JsonAdapter;
 import com.google.gson.annotations.SerializedName;
+import com.video.airstream.adapter.DateTypeAdapter;
 
 public class Device {
 
     @SerializedName("deviceId")
     private Integer deviceId;
 
-    @SerializedName("staticIp")
-    private String staticIp;
+    @SerializedName("macId")
+    private String macId;
 
     @SerializedName("deviceNumber")
     private String deviceNumber;
@@ -20,8 +24,14 @@ public class Device {
     @SerializedName("deviceOwner")
     private User deviceOwner;
 
+    @JsonAdapter(DateTypeAdapter.class)
+    private Date deviceStatus;
+
     @SerializedName("videoDataSet")
     Set<VideoData> videoDataSet;
+
+    @SerializedName("liveUrlDataSet")
+    Set<LiveUrl> liveUrlDataSet;
 
     public Integer getDeviceId() {
         return deviceId;
@@ -31,12 +41,12 @@ public class Device {
         this.deviceId = deviceId;
     }
 
-    public String getStaticIp() {
-        return staticIp;
+    public String getMacId() {
+        return macId;
     }
 
-    public void setStaticIp(String staticIp) {
-        this.staticIp = staticIp;
+    public void setMacId(String macId) {
+        this.macId = macId;
     }
 
     public String getDeviceNumber() {
@@ -72,5 +82,11 @@ public class Device {
         this.videoDataSet = videoDataSet;
     }
 
+    public Set<LiveUrl> getLiveUrlDataSet() {
+        return liveUrlDataSet;
+    }
 
+    public void setLiveUrlDataSet(Set<LiveUrl> liveUrlDataSet) {
+        this.liveUrlDataSet = liveUrlDataSet;
+    }
 }
