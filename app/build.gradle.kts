@@ -44,4 +44,5 @@ dependencies {
     androidTestImplementation(libs.espresso.core)
     implementation(libs.firebase)
     implementation(libs.firebase.analytics)
+    implementation(libs.youtub.player)
 }

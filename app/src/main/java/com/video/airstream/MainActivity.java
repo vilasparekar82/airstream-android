@@ -1,5 +1,7 @@
 package com.video.airstream;
 
+import static android.view.View.GONE;
+import static android.view.View.VISIBLE;
 import static com.video.airstream.modal.Event.DELETE_ALL_VIDEOS;
 import static com.video.airstream.modal.Event.DELETE_VIDEO;
 import static com.video.airstream.modal.Event.DEVICE_BOOT;
@@ -16,23 +18,27 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.media.MediaPlayer;
-import android.net.wifi.WifiManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
-import android.webkit.WebView;
 import android.widget.Toast;
 import android.widget.VideoView;
 
 import androidx.activity.EdgeToEdge;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants;
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer;
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener;
 import com.video.airstream.modal.Event;
 import com.video.airstream.service.LogInformation;
+
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -42,11 +48,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends AppCompatActivity {
     private VideoView videoView;
-    private WebView webView;
+    private com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView youTubePlayerView;
     AtomicInteger currentPosition = new AtomicInteger();
     int videoLength = 0;
     File[] videoFiles = null;
     DeviceAsyncTask deviceAsyncTask;
+
+    String urlPlayerId;
 
     String serialNumber;
 
@@ -95,6 +103,7 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(myReceiver, new IntentFilter(PLAY_LIVE_URL.name()));
         registerReceiver(myReceiver, new IntentFilter(LIVE_URL_START.name()));
         registerReceiver(myReceiver, new IntentFilter(LIVE_URL_STOP.name()));
+        this.videoView.setVisibility(VISIBLE);
         this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
         this.videoView.start();
         this.videoView.setOnCompletionListener(mp -> {
@@ -128,7 +137,7 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
         this.videoView = findViewById(R.id.idVideoView);
-        this.webView = findViewById(R.id.web_view);
+        youTubePlayerView = findViewById(R.id.youtube_player_view);
     }
 
     @Override
@@ -137,9 +146,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void playAllVideo(Event event) {
-        videoView.setVisibility(View.VISIBLE);
+        videoView.setVisibility(VISIBLE);
         // Show WebView
-        webView.setVisibility(View.GONE);
         File videoDir= this.getBaseContext().getExternalFilesDir("airstream");
         if(null != videoDir && videoDir.listFiles() != null && Objects.requireNonNull(videoDir.listFiles()).length > 0) {
             videoFiles = videoDir.listFiles();
@@ -177,23 +185,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void playLiveUrl(String liveUrlPath) {
+        Uri uri = Uri.parse(liveUrlPath);
+        urlPlayerId = uri.getQueryParameter("v");
         videoView.stopPlayback(); // Stop video playback
-        videoView.setVisibility(View.GONE);
-
-        // Show WebView
-        webView.setVisibility(View.VISIBLE);
-        webView.loadUrl(liveUrlPath);
+        videoView.setVisibility(GONE);
+        youTubePlayerView.setVisibility(VISIBLE);
+        youTubePlayerView.getYouTubePlayerWhenReady(youTubePlayer -> {
+            youTubePlayer.loadVideo(urlPlayerId,0);
+        });
     }
 
     public void stopLiveUrl() {
-        this.webView.stopLoading();
-        this.webView.setVisibility(View.GONE);
-        this.webView.destroy();
-        this.videoView.setVisibility(View.VISIBLE);
-        this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
-        this.videoView.start();
-        this.videoView.setOnCompletionListener(mp -> {
-            this.playAllVideo(DEVICE_BOOT);
+        youTubePlayerView.setVisibility(GONE);
+        videoView.setVisibility(VISIBLE);
+        videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
+        videoView.start();
+        videoView.setOnCompletionListener(mp -> {
+            playAllVideo(DEVICE_BOOT);
             deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
         });
     }
@@ -224,6 +232,5 @@ public class MainActivity extends AppCompatActivity {
 
         return serialNumber;
     }
-
 
 }
