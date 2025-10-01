@@ -1,6 +1,8 @@
 package com.video.airstream;
 
 import static android.content.Context.DOWNLOAD_SERVICE;
+import static android.view.View.GONE;
+import static android.view.View.VISIBLE;
 import static com.video.airstream.modal.Event.DEVICE_BOOT;
 
 import android.app.Activity;
@@ -87,13 +89,25 @@ public class DeviceAsyncTask  {
                             downloadAllVideos(device);
                             activity.sendBroadcast(new Intent(Event.PLAY_ALL.name()));
                         } else {
-                            Toast.makeText(activity.getBaseContext(), "Loading..... No videos available",Toast.LENGTH_LONG).show();
+                            activity.runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    Toast.makeText(activity.getBaseContext(), "Loading..... No videos available",Toast.LENGTH_LONG).show();
+                                }
+                            });
+
                             callSyncMethod();
                         }
                     }
 
                 } else {
-                    Toast.makeText(activity.getBaseContext(), "Device is not registered. Please register your device in admin portal",Toast.LENGTH_LONG).show();
+                    activity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(activity.getBaseContext(), "Device is not registered. Please register your device in admin portal",Toast.LENGTH_LONG).show();
+                        }
+                    });
+
                     callSyncMethod();
                 }
                 Log.v(TAG, "Device details api: " + device.toString());
@@ -186,7 +200,7 @@ public class DeviceAsyncTask  {
             public void run() {
                 updateDeviceToken(device);
             }
-        }, 120000);
+        }, 60000,120000);
     }
 
 }

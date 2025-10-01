@@ -187,23 +187,35 @@ public class MainActivity extends AppCompatActivity {
     public void playLiveUrl(String liveUrlPath) {
         Uri uri = Uri.parse(liveUrlPath);
         urlPlayerId = uri.getQueryParameter("v");
-        videoView.stopPlayback(); // Stop video playback
-        videoView.setVisibility(GONE);
-        youTubePlayerView.setVisibility(VISIBLE);
-        youTubePlayerView.getYouTubePlayerWhenReady(youTubePlayer -> {
-            youTubePlayer.loadVideo(urlPlayerId,0);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                videoView.stopPlayback(); // Stop video playback
+                videoView.setVisibility(GONE);
+                youTubePlayerView.setVisibility(VISIBLE);
+                youTubePlayerView.getYouTubePlayerWhenReady(youTubePlayer -> {
+                    youTubePlayer.loadVideo(urlPlayerId,0);
+                });
+            }
         });
+
     }
 
     public void stopLiveUrl() {
-        youTubePlayerView.setVisibility(GONE);
-        videoView.setVisibility(VISIBLE);
-        videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
-        videoView.start();
-        videoView.setOnCompletionListener(mp -> {
-            playAllVideo(DEVICE_BOOT);
-            deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                youTubePlayerView.setVisibility(GONE);
+                videoView.setVisibility(VISIBLE);
+                videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
+                videoView.start();
+                videoView.setOnCompletionListener(mp -> {
+                    playAllVideo(DEVICE_BOOT);
+                    deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
+                });
+            }
         });
+
     }
 
     public static String getSerialNumber() {
