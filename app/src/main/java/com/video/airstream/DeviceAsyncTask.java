@@ -1,8 +1,6 @@
 package com.video.airstream;
 
 import static android.content.Context.DOWNLOAD_SERVICE;
-import static android.view.View.GONE;
-import static android.view.View.VISIBLE;
 import static com.video.airstream.modal.Event.DEVICE_BOOT;
 
 import android.app.Activity;
@@ -12,20 +10,16 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.google.firebase.messaging.FirebaseMessaging;
-import com.google.gson.GsonBuilder;
 import com.video.airstream.apiclient.APIClient;
 import com.video.airstream.modal.Device;
 import com.video.airstream.modal.Event;
-import com.video.airstream.modal.LiveUrl;
 import com.video.airstream.modal.VideoData;
 import com.video.airstream.service.APIInterface;
 import com.video.airstream.service.DownloadHelper;
 
 import java.io.File;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.function.Predicate;
@@ -71,23 +65,29 @@ public class DeviceAsyncTask  {
                 if(null != device && null != device.getDeviceId()) {
                     boolean liveActive = false;
                     setupFirebaseToken(device);
-                    if (!device.getLiveUrlDataSet().isEmpty()) {
-                        Optional<String> liveUrl = device.getLiveUrlDataSet().stream().filter(liveUrlObj -> liveUrlObj.getLiveStatus().equalsIgnoreCase("Active"))
-                                .map(LiveUrl::getLiveUrl).findFirst();
-                        if(!liveUrl.isEmpty()) {
-                            liveActive = true;
-                            Intent i = new Intent(Event.PLAY_LIVE_URL.name());
-                            i.putExtra(Event.PLAY_LIVE_URL.name(), liveUrl.get());
-                            activity.sendBroadcast(i);
-                        }
-                    }
+                    if (device.getLiveUrlPath() != null && !device.getLiveUrlPath().isEmpty()) {
+                        liveActive = true;
+                        Intent i = new Intent(Event.PLAY_LIVE_URL.name());
+                        i.putExtra(Event.PLAY_LIVE_URL.name(), device.getLiveUrlPath());
+                        activity.runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                activity.sendBroadcast(i);
+                            }
+                        });
 
+                    }
                     if(!liveActive) {
                         syncLocalVideos(device);
-
                         if (!device.getVideoDataSet().isEmpty()) {
                             downloadAllVideos(device);
-                            activity.sendBroadcast(new Intent(Event.PLAY_ALL.name()));
+                            activity.runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    activity.sendBroadcast(new Intent(Event.PLAY_ALL.name()));
+                                }
+                            });
+
                         } else {
                             activity.runOnUiThread(new Runnable() {
                                 @Override
@@ -95,7 +95,6 @@ public class DeviceAsyncTask  {
                                     Toast.makeText(activity.getBaseContext(), "Loading..... No videos available",Toast.LENGTH_LONG).show();
                                 }
                             });
-
                             callSyncMethod();
                         }
                     }

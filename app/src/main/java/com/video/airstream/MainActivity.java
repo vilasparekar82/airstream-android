@@ -75,7 +75,13 @@ public class MainActivity extends AppCompatActivity {
                     deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
                     break;
                 case "PLAY_ALL":
-                    playAllVideo(DEVICE_BOOT);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            playAllVideo(DEVICE_BOOT);
+                        }
+                    });
+
                     break;
                 case "PLAY_LIVE_URL":
                     String liveUrl = Objects.requireNonNull(intent.getExtras()).getString(PLAY_LIVE_URL.name());
@@ -146,6 +152,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void playAllVideo(Event event) {
+
         videoView.setVisibility(VISIBLE);
         // Show WebView
         File videoDir= this.getBaseContext().getExternalFilesDir("airstream");

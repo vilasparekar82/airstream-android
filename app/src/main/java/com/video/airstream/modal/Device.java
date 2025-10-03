@@ -30,8 +30,8 @@ public class Device {
     @SerializedName("videoDataSet")
     Set<VideoData> videoDataSet;
 
-    @SerializedName("liveUrlDataSet")
-    Set<LiveUrl> liveUrlDataSet;
+    @SerializedName("liveUrlPath")
+    String liveUrlPath;
 
     public Integer getDeviceId() {
         return deviceId;
@@ -82,11 +82,11 @@ public class Device {
         this.videoDataSet = videoDataSet;
     }
 
-    public Set<LiveUrl> getLiveUrlDataSet() {
-        return liveUrlDataSet;
+    public String getLiveUrlPath() {
+        return liveUrlPath;
     }
 
-    public void setLiveUrlDataSet(Set<LiveUrl> liveUrlDataSet) {
-        this.liveUrlDataSet = liveUrlDataSet;
+    public void setLiveUrlPath(String liveUrlPath) {
+        this.liveUrlPath = liveUrlPath;
     }
 }
