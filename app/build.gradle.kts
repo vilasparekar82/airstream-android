@@ -45,4 +45,5 @@ dependencies {
     implementation(libs.firebase)
     implementation(libs.firebase.analytics)
     implementation(libs.youtub.player)
+    implementation(libs.androidx.work)
 }

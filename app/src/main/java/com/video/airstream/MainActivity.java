@@ -21,7 +21,9 @@ import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.TranslateAnimation;
+import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.VideoView;
 
@@ -31,33 +33,31 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.work.Data;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
 
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants;
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer;
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener;
 import com.video.airstream.modal.Event;
-import com.video.airstream.service.LogInformation;
-
-import org.jetbrains.annotations.NotNull;
+import com.video.airstream.worker.DeviceDetailsWorker;
+import com.video.airstream.worker.DeviceFireBaseTokenWorker;
+import com.video.airstream.worker.MultiVideosDownloadWorker;
+import com.video.airstream.worker.SyncVideosWorker;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends AppCompatActivity {
     private VideoView videoView;
+    private TextView tickerTextView;
+    private TextView newsZoneTextView;
     private com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView youTubePlayerView;
     AtomicInteger currentPosition = new AtomicInteger();
     int videoLength = 0;
     File[] videoFiles = null;
-    DeviceAsyncTask deviceAsyncTask;
-
     String urlPlayerId;
-
     String serialNumber;
-
 
     public BroadcastReceiver myReceiver = new BroadcastReceiver() {
         @Override
@@ -72,16 +72,9 @@ public class MainActivity extends AppCompatActivity {
                 case "DELETE_VIDEO":
                 case "DELETE_ALL_VIDEOS":
                 case "LIVE_URL_START":
-                    deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
                     break;
                 case "PLAY_ALL":
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            playAllVideo(DEVICE_BOOT);
-                        }
-                    });
-
+                    playAllVideo(DEVICE_BOOT);
                     break;
                 case "PLAY_LIVE_URL":
                     String liveUrl = Objects.requireNonNull(intent.getExtras()).getString(PLAY_LIVE_URL.name());
@@ -112,10 +105,20 @@ public class MainActivity extends AppCompatActivity {
         this.videoView.setVisibility(VISIBLE);
         this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
         this.videoView.start();
-        this.videoView.setOnCompletionListener(mp -> {
-            this.playAllVideo(DEVICE_BOOT);
-            deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
-        });
+    }
+
+    @NonNull
+    private static Animation getAnimation() {
+        Animation mAnimation = new TranslateAnimation(
+                Animation.RELATIVE_TO_SELF, 1.0f, // Start off-screen right
+                Animation.RELATIVE_TO_SELF, -1.0f, // End off-screen left
+                Animation.RELATIVE_TO_SELF, 0.0f,
+                Animation.RELATIVE_TO_SELF, 0.0f
+        );
+        mAnimation.setDuration(22000); // Adjust this value to control speed (shorter duration = faster)
+        mAnimation.setRepeatMode(Animation.RESTART);
+        mAnimation.setRepeatCount(Animation.INFINITE);
+        return mAnimation;
     }
 
     @Override
@@ -134,7 +137,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         serialNumber = getSerialNumber();
-        deviceAsyncTask = new DeviceAsyncTask(this);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -142,17 +144,32 @@ public class MainActivity extends AppCompatActivity {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
-        this.videoView = findViewById(R.id.idVideoView);
+        videoView = findViewById(R.id.idVideoView);
         youTubePlayerView = findViewById(R.id.youtube_player_view);
+        tickerTextView = findViewById(R.id.tickerTextView);
+        newsZoneTextView = findViewById(R.id.news_zone);
+        String host = getString(R.string.host_path);
+        startConditionalWorkChain(getBaseContext(), host, serialNumber);
     }
 
     @Override
     public void onPostResume(){
         super.onPostResume();
     }
+    public void setNewsTicker() {
+        StringBuilder newsTicker = new StringBuilder("श्रेयसच्या नेतृत्वात इंडियाचा फायनलमध्ये 2 विकेट्सने विजय, कांगारुंना लोळवत मालिका जिंकली");
+        int spaceCount = 285;
+        if(newsTicker.length() < spaceCount) {
+            spaceCount = spaceCount - newsTicker.length();
+            for(int i=0;i<=spaceCount;i++){
+                newsTicker.append(" ");
+            }
+        }
+        tickerTextView.setSelected(true);
+        tickerTextView.setText(newsTicker);
+    }
 
     public void playAllVideo(Event event) {
-
         videoView.setVisibility(VISIBLE);
         // Show WebView
         File videoDir= this.getBaseContext().getExternalFilesDir("airstream");
@@ -166,16 +183,12 @@ public class MainActivity extends AppCompatActivity {
 
                 this.videoView.setVideoPath(videoFiles[0].getAbsolutePath());
                 this.videoView.start();
-                LogInformation.appendLog(serialNumber, videoFiles[0].getName()  + " " + LocalDateTime.now());
-                System.out.println(videoFiles[0].getName()  + " " + LocalDateTime.now());
                 this.videoView.setOnCompletionListener(mp -> {
                     if(currentPosition.incrementAndGet() >= videoLength) {
                         currentPosition.set(0);
                     }
                     videoView.setVideoPath(videoFiles[currentPosition.get()].getAbsolutePath());
                     videoView.start();
-                    LogInformation.appendLog(serialNumber, videoFiles[currentPosition.get()].getName()  + " " + LocalDateTime.now());
-                    System.out.println(videoFiles[currentPosition.get()].getName() + " " + LocalDateTime.now());
                 });
                 this.videoView.setOnErrorListener((mp, what, extra) -> {
                       videoView.stopPlayback();
@@ -199,6 +212,8 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 videoView.stopPlayback(); // Stop video playback
                 videoView.setVisibility(GONE);
+                newsZoneTextView.setVisibility(GONE);
+                tickerTextView.setVisibility(GONE);
                 youTubePlayerView.setVisibility(VISIBLE);
                 youTubePlayerView.getYouTubePlayerWhenReady(youTubePlayer -> {
                     youTubePlayer.loadVideo(urlPlayerId,0);
@@ -214,24 +229,20 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 youTubePlayerView.setVisibility(GONE);
                 videoView.setVisibility(VISIBLE);
+                newsZoneTextView.setVisibility(VISIBLE);
+                tickerTextView.setVisibility(VISIBLE);
                 videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
                 videoView.start();
-                videoView.setOnCompletionListener(mp -> {
-                    playAllVideo(DEVICE_BOOT);
-                    deviceAsyncTask.runAsyncTask(DEVICE_BOOT);
-                });
             }
         });
 
     }
 
-    public static String getSerialNumber() {
+    public String getSerialNumber() {
         String serialNumber;
-
         try {
             Class<?> c = Class.forName("android.os.SystemProperties");
             Method get = c.getMethod("get", String.class);
-
             serialNumber = (String) get.invoke(c, "gsm.sn1");
             if (serialNumber != null && serialNumber.isEmpty())
                 serialNumber = (String) get.invoke(c, "ril.serialnumber");
@@ -241,15 +252,33 @@ public class MainActivity extends AppCompatActivity {
                 serialNumber = (String) get.invoke(c, "sys.serialnumber");
             if (serialNumber != null && serialNumber.isEmpty())
                 serialNumber = Build.getSerial();
-
             // If none of the methods above worked
             if (serialNumber.equals(""))
                 serialNumber = null;
         } catch (Exception e) {
             serialNumber = null;
         }
-
         return serialNumber;
+    }
+
+    public void startConditionalWorkChain(Context context, String host, String deviceNumber) {
+        Data inputData = new Data.Builder()
+                .putString("HOST", host)
+                .putString("DEVICE_MAC_ID", deviceNumber)
+                .build();
+        // Create the individual work requests
+        OneTimeWorkRequest deviceDetailsRequest = new OneTimeWorkRequest.Builder(DeviceDetailsWorker.class).setInputData(inputData).build();
+        OneTimeWorkRequest deviceTokenRequest = new OneTimeWorkRequest.Builder(DeviceFireBaseTokenWorker.class).build();
+        OneTimeWorkRequest videoSyncRequest = new OneTimeWorkRequest.Builder(SyncVideosWorker.class).build();
+        OneTimeWorkRequest multiVideoDownloadRequest = new OneTimeWorkRequest.Builder(MultiVideosDownloadWorker.class).build();
+
+        // Enqueue the chain of workers
+        WorkManager.getInstance(context)
+                .beginWith(deviceDetailsRequest)
+                .then(deviceTokenRequest)
+                .then(videoSyncRequest)
+                .then(multiVideoDownloadRequest)
+                .enqueue();
     }
 
 }
