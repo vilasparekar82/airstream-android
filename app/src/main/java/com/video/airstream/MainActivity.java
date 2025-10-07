@@ -35,29 +35,41 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.work.Data;
 import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkInfo;
 import androidx.work.WorkManager;
 
+import com.google.firebase.messaging.FirebaseMessaging;
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView;
+import com.video.airstream.apiclient.APIClient;
 import com.video.airstream.modal.Event;
+import com.video.airstream.service.APIInterface;
 import com.video.airstream.worker.DeviceDetailsWorker;
 import com.video.airstream.worker.DeviceFireBaseTokenWorker;
+import com.video.airstream.worker.DownloadStatusCheckerWorker;
 import com.video.airstream.worker.MultiVideosDownloadWorker;
 import com.video.airstream.worker.SyncVideosWorker;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class MainActivity extends AppCompatActivity {
     private VideoView videoView;
     private TextView tickerTextView;
     private TextView newsZoneTextView;
-    private com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView youTubePlayerView;
+    private YouTubePlayerView youTubePlayerView;
     AtomicInteger currentPosition = new AtomicInteger();
+    String token = null;
     int videoLength = 0;
     File[] videoFiles = null;
     String urlPlayerId;
-    String serialNumber;
+    String deviceNumber;
+    String host;
+    String downloadPath;
+
 
     public BroadcastReceiver myReceiver = new BroadcastReceiver() {
         @Override
@@ -69,9 +81,13 @@ public class MainActivity extends AppCompatActivity {
             switch (action) {
                 case "UPLOAD_VIDEOS":
                 case "UPDATE_VIDEOS":
+                case "LIVE_URL_START":
+                    startConditionalWorkChain(getBaseContext());
+                    break;
                 case "DELETE_VIDEO":
                 case "DELETE_ALL_VIDEOS":
-                case "LIVE_URL_START":
+                    startDeletingVideos(getBaseContext());
+                    resetVideoView();
                     break;
                 case "PLAY_ALL":
                     playAllVideo(DEVICE_BOOT);
@@ -105,6 +121,8 @@ public class MainActivity extends AppCompatActivity {
         this.videoView.setVisibility(VISIBLE);
         this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
         this.videoView.start();
+        this.videoView.setOnCompletionListener(mp -> playAllVideo(PLAY_ALL));
+
     }
 
     @NonNull
@@ -136,7 +154,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        serialNumber = getSerialNumber();
+        deviceNumber = getSerialNumber();
+        host = getString(R.string.host_path);
+        downloadPath = getString(R.string.download_path);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -148,8 +168,15 @@ public class MainActivity extends AppCompatActivity {
         youTubePlayerView = findViewById(R.id.youtube_player_view);
         tickerTextView = findViewById(R.id.tickerTextView);
         newsZoneTextView = findViewById(R.id.news_zone);
-        String host = getString(R.string.host_path);
-        startConditionalWorkChain(getBaseContext(), host, serialNumber);
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) {
+                        return;
+                    }
+                    token = task.getResult();
+                    startConditionalWorkChain(getBaseContext());
+                });
+
     }
 
     @Override
@@ -168,7 +195,13 @@ public class MainActivity extends AppCompatActivity {
         tickerTextView.setSelected(true);
         tickerTextView.setText(newsTicker);
     }
-
+    public void resetVideoView() {
+        videoView.stopPlayback();
+        this.videoView.setVisibility(VISIBLE);
+        this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
+        this.videoView.start();
+        this.videoView.setOnCompletionListener(mp -> {});
+    }
     public void playAllVideo(Event event) {
         videoView.setVisibility(VISIBLE);
         // Show WebView
@@ -207,35 +240,22 @@ public class MainActivity extends AppCompatActivity {
     public void playLiveUrl(String liveUrlPath) {
         Uri uri = Uri.parse(liveUrlPath);
         urlPlayerId = uri.getQueryParameter("v");
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                videoView.stopPlayback(); // Stop video playback
-                videoView.setVisibility(GONE);
-                newsZoneTextView.setVisibility(GONE);
-                tickerTextView.setVisibility(GONE);
-                youTubePlayerView.setVisibility(VISIBLE);
-                youTubePlayerView.getYouTubePlayerWhenReady(youTubePlayer -> {
-                    youTubePlayer.loadVideo(urlPlayerId,0);
-                });
-            }
-        });
+        videoView.stopPlayback(); // Stop video playback
+        videoView.setVisibility(GONE);
+        newsZoneTextView.setVisibility(GONE);
+        tickerTextView.setVisibility(GONE);
+        youTubePlayerView.setVisibility(VISIBLE);
+        youTubePlayerView.getYouTubePlayerWhenReady(youTubePlayer -> youTubePlayer.loadVideo(urlPlayerId,0));
 
     }
 
     public void stopLiveUrl() {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                youTubePlayerView.setVisibility(GONE);
-                videoView.setVisibility(VISIBLE);
-                newsZoneTextView.setVisibility(VISIBLE);
-                tickerTextView.setVisibility(VISIBLE);
-                videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
-                videoView.start();
-            }
-        });
-
+        youTubePlayerView.setVisibility(GONE);
+        videoView.setVisibility(VISIBLE);
+        newsZoneTextView.setVisibility(VISIBLE);
+        tickerTextView.setVisibility(VISIBLE);
+        videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
+        videoView.start();
     }
 
     public String getSerialNumber() {
@@ -252,25 +272,31 @@ public class MainActivity extends AppCompatActivity {
                 serialNumber = (String) get.invoke(c, "sys.serialnumber");
             if (serialNumber != null && serialNumber.isEmpty())
                 serialNumber = Build.getSerial();
-            // If none of the methods above worked
-            if (serialNumber.equals(""))
-                serialNumber = null;
         } catch (Exception e) {
             serialNumber = null;
         }
         return serialNumber;
     }
 
-    public void startConditionalWorkChain(Context context, String host, String deviceNumber) {
+    public void startConditionalWorkChain(Context context) {
+
         Data inputData = new Data.Builder()
                 .putString("HOST", host)
                 .putString("DEVICE_MAC_ID", deviceNumber)
+                .putString("DOWNLOAD_PATH", downloadPath)
+                .putString("TOKEN", token)
                 .build();
+
         // Create the individual work requests
-        OneTimeWorkRequest deviceDetailsRequest = new OneTimeWorkRequest.Builder(DeviceDetailsWorker.class).setInputData(inputData).build();
-        OneTimeWorkRequest deviceTokenRequest = new OneTimeWorkRequest.Builder(DeviceFireBaseTokenWorker.class).build();
+        OneTimeWorkRequest deviceDetailsRequest = new OneTimeWorkRequest.Builder(DeviceDetailsWorker.class)
+                .setInputData(inputData).build();
+        OneTimeWorkRequest deviceTokenRequest = new OneTimeWorkRequest.Builder(DeviceFireBaseTokenWorker.class)
+                .setInputData(inputData).build();
         OneTimeWorkRequest videoSyncRequest = new OneTimeWorkRequest.Builder(SyncVideosWorker.class).build();
-        OneTimeWorkRequest multiVideoDownloadRequest = new OneTimeWorkRequest.Builder(MultiVideosDownloadWorker.class).build();
+        OneTimeWorkRequest multiVideoDownloadRequest = new OneTimeWorkRequest.Builder(MultiVideosDownloadWorker.class)
+                .setInputData(inputData).build();
+        OneTimeWorkRequest downloadStatusWorker = new OneTimeWorkRequest.Builder(DownloadStatusCheckerWorker.class)
+                .setInputData(inputData).build();
 
         // Enqueue the chain of workers
         WorkManager.getInstance(context)
@@ -278,7 +304,95 @@ public class MainActivity extends AppCompatActivity {
                 .then(deviceTokenRequest)
                 .then(videoSyncRequest)
                 .then(multiVideoDownloadRequest)
+                .then(downloadStatusWorker)
                 .enqueue();
+
+        listenDeviceDetails(deviceDetailsRequest);
+        listenVideoSyncDetails(videoSyncRequest);
+        listenMultiVideoDownloader(multiVideoDownloadRequest, context);
+        listenAllVideoDownloaderStatus(downloadStatusWorker);
+
+    }
+
+    public void startDeletingVideos(Context context) {
+        Data inputData = new Data.Builder()
+                .putString("HOST", host)
+                .putString("DEVICE_MAC_ID", deviceNumber)
+                .putString("DOWNLOAD_PATH", downloadPath)
+                .build();
+        // Create the individual work requests
+        OneTimeWorkRequest deviceDetailsRequest = new OneTimeWorkRequest.Builder(DeviceDetailsWorker.class)
+                .setInputData(inputData).build();
+        OneTimeWorkRequest videoSyncRequest = new OneTimeWorkRequest.Builder(SyncVideosWorker.class).build();
+
+        // Enqueue the chain of workers
+        WorkManager.getInstance(context)
+                .beginWith(deviceDetailsRequest)
+                .then(videoSyncRequest)
+                .enqueue();
+
+        listenVideoSyncDetails(videoSyncRequest);
+
+    }
+
+    private void listenDeviceDetails(OneTimeWorkRequest deviceDetailsRequest){
+        WorkManager.getInstance(getApplicationContext())
+                .getWorkInfoByIdLiveData(deviceDetailsRequest.getId())
+                .observe(this, workInfo -> {
+                    if (workInfo != null) {
+                        if (workInfo.getState() == WorkInfo.State.FAILED) {
+                            Data outputData = workInfo.getOutputData();
+                            String failureResult = outputData.getString("device_not_registered");
+                            if(failureResult !=null) {
+                                Toast.makeText(getBaseContext(), "Device is not registered", Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    }
+                });
+
+    }
+
+    private void listenMultiVideoDownloader(OneTimeWorkRequest multiVideoDownloadRequest, Context context){
+        WorkManager.getInstance(getApplicationContext())
+                .getWorkInfoByIdLiveData(multiVideoDownloadRequest.getId())
+                .observe(this, workInfo -> {
+                    if (workInfo != null) {
+                        if (workInfo.getState() == WorkInfo.State.FAILED) {
+                            Data outputData = workInfo.getOutputData();
+                            String failureResult = outputData.getString("videos_not_available");
+                            if(failureResult !=null) {
+                                Toast.makeText(getBaseContext(), "Loading..... No videos available", Toast.LENGTH_LONG).show();
+                                startConditionalWorkChain(context);
+                            }
+                        }
+                    }
+                });
+    }
+
+    private void listenAllVideoDownloaderStatus(OneTimeWorkRequest downloadStatusWorker){
+        WorkManager.getInstance(getApplicationContext())
+                .getWorkInfoByIdLiveData(downloadStatusWorker.getId())
+                .observe(this, workInfo -> {
+                    if (workInfo != null) {
+                        if (workInfo.getState() == WorkInfo.State.SUCCEEDED) {
+                           playAllVideo(DEVICE_BOOT);
+                        }
+                    }
+                });
+    }
+
+    private void listenVideoSyncDetails(OneTimeWorkRequest videoSyncRequest){
+        WorkManager.getInstance(getApplicationContext())
+                .getWorkInfoByIdLiveData(videoSyncRequest.getId())
+                .observe(this, workInfo -> {
+                    if (workInfo != null) {
+                        if (workInfo.getState() == WorkInfo.State.SUCCEEDED) {
+                            Data outputData = workInfo.getOutputData();
+                            boolean videoDeleted = outputData.getBoolean("deleted", false);
+                            if(videoDeleted) playAllVideo(PLAY_ALL);
+                        }
+                    }
+                });
     }
 
 }

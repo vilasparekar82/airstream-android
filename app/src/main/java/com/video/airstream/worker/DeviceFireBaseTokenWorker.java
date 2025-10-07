@@ -8,7 +8,6 @@ import androidx.work.Data;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
-import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.gson.Gson;
 import com.video.airstream.apiclient.APIClient;
 import com.video.airstream.modal.Device;
@@ -27,28 +26,20 @@ public class DeviceFireBaseTokenWorker extends Worker {
     public Result doWork() {
         Data inputData = getInputData();
         String deviceJson = inputData.getString("device_details");
+        String host = inputData.getString("HOST");
+        String token = inputData.getString("TOKEN");
         if (TextUtils.isEmpty(deviceJson)) {
             return Result.failure();
         } else {
             Gson gson = new Gson();
             Device device = gson.fromJson(deviceJson, Device.class);
-            if(device.getDeviceToken() == null) {
-                FirebaseMessaging.getInstance().getToken()
-                .addOnCompleteListener(task -> {
-                    if (!task.isSuccessful()) {
-                        return;
-                    }
-                    String token = task.getResult();
-                    if(!device.getDeviceToken().equals(token)){
-                        device.setDeviceToken(token);
-                        String host = inputData.getString("HOST");
-                        APIInterface apiInterface = APIClient.getClient(host).create(APIInterface.class);
-                        try {
-                            apiInterface.updateDeviceToken(device).execute();
-                        } catch (IOException ignored) {}
-                    }
+            if(device.getDeviceToken() == null || (device.getDeviceToken() != null && !device.getDeviceToken().equals(token))) {
+                device.setDeviceToken(token);
+                APIInterface apiInterface = APIClient.getClient(host).create(APIInterface.class);
+                try {
+                    apiInterface.updateDeviceToken(device).execute();
+                } catch (IOException ignored) {}
 
-                });
             }
 
         }

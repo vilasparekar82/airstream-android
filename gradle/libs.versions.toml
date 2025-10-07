@@ -12,6 +12,7 @@ retrofit = "2.9.0"
 converter-gson = "2.9.0"
 firebase-analytics = "22.2.0"
 youtub-core = "12.1.0"
+androidx-version = "2.9.0"
 
 [libraries]
 firebase = { module = "com.google.firebase:firebase-messaging", version.ref = "firebaseBom" }
@@ -26,6 +27,7 @@ retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = 
 converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "converter-gson" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics", version.ref = "firebase-analytics" }
 youtub-player = { group = "com.pierfrancescosoffritti.androidyoutubeplayer", name = "core", version.ref = "youtub-core" }
+androidx-work = { group = "androidx.work", name = "work-runtime", version.ref = "androidx-version" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

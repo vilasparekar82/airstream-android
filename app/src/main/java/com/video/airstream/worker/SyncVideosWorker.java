@@ -14,6 +14,7 @@ import com.video.airstream.modal.Device;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SyncVideosWorker extends Worker {
     public SyncVideosWorker(@NonNull Context context, @NonNull WorkerParameters workerParams) {
@@ -23,6 +24,7 @@ public class SyncVideosWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        AtomicBoolean deleteStatus = new AtomicBoolean(false);
         Data inputData = getInputData();
         String deviceJson = inputData.getString("device_details");
         if (TextUtils.isEmpty(deviceJson)) {
@@ -36,12 +38,14 @@ public class SyncVideosWorker extends Worker {
                     long videoCount = device.getVideoDataSet().stream().filter(videoData -> video.getName().contains(videoData.getVideoName())).count();
                     if(videoCount == 0) {
                         video.delete();
+                        deleteStatus.set(true);
                     }
                 });
             }
         }
         Data outputData = new Data.Builder()
                 .putString("device_details", deviceJson)
+                .putBoolean("deleted", deleteStatus.get())
                 .build();
         return Result.success(outputData);
     }

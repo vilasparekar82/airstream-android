@@ -42,13 +42,23 @@ public class MultiVideosDownloadWorker extends Worker {
                 device.getVideoDataSet().stream().filter(fileChecker).forEach(videoData -> {
                     String endpoint = inputData.getString("HOST") + inputData.getString("DOWNLOAD_PATH");
                     String url = endpoint + device.getDeviceId() + "/" + videoData.getVideoId();
+                    File file=new File(videoDir,videoData.getVideoName());
                     Uri uri = Uri.parse(url);
                     DownloadManager.Request request = new DownloadManager.Request(uri)
                             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                            .setTitle("Downloading File...")
-                            .setDescription(uri.getLastPathSegment());
+                            .setDestinationUri(Uri.fromFile(file))
+                            .setTitle(videoData.getVideoName())
+                            .setDescription("Downloading")
+                            .setRequiresCharging(false)
+                            .setAllowedOverMetered(true)
+                            .setAllowedOverRoaming(true);
                     downloadManager.enqueue(request);
                 });
+            } else {
+                Data outputDataFailure = new Data.Builder()
+                        .putString("videos_not_available", "videos_not_available")
+                        .build();
+                return Result.failure(outputDataFailure);
             }
         }
         return Result.success();
