@@ -1,6 +1,9 @@
 package com.video.airstream.service;
 
 import com.video.airstream.modal.Device;
+import com.video.airstream.modal.Ticker;
+
+import java.util.List;
 
 import retrofit2.http.Body;
 import retrofit2.http.GET;
@@ -17,5 +20,11 @@ public interface APIInterface {
 
    @PUT("api/device/android")
    Call<Device> updateDeviceToken(@Body Device device);
+
+   @GET("api/device/android/ping/{serialNumber}")
+   Call<Device> pingDevice(@Path("serialNumber") String serialNumber);
+
+   @GET("api/ticker/android/{orgId}")
+   Call<List<Ticker>> getTicker(@Path("orgId") String orgId);
 
 }

@@ -21,6 +21,7 @@ import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.animation.Animation;
 import android.view.animation.TranslateAnimation;
 import android.widget.TextView;
@@ -39,8 +40,10 @@ import androidx.work.WorkInfo;
 import androidx.work.WorkManager;
 
 import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.gson.Gson;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView;
 import com.video.airstream.apiclient.APIClient;
+import com.video.airstream.modal.Device;
 import com.video.airstream.modal.Event;
 import com.video.airstream.service.APIInterface;
 import com.video.airstream.worker.DeviceDetailsWorker;
@@ -48,6 +51,7 @@ import com.video.airstream.worker.DeviceFireBaseTokenWorker;
 import com.video.airstream.worker.DownloadStatusCheckerWorker;
 import com.video.airstream.worker.MultiVideosDownloadWorker;
 import com.video.airstream.worker.SyncVideosWorker;
+import com.video.airstream.worker.TickerWorker;
 
 import java.io.File;
 import java.io.IOException;
@@ -122,6 +126,15 @@ public class MainActivity extends AppCompatActivity {
         this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
         this.videoView.start();
         this.videoView.setOnCompletionListener(mp -> playAllVideo(PLAY_ALL));
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) {
+                        return;
+                    }
+                    token = task.getResult();
+                    startConditionalWorkChain(getBaseContext());
+                });
+
 
     }
 
@@ -168,14 +181,6 @@ public class MainActivity extends AppCompatActivity {
         youTubePlayerView = findViewById(R.id.youtube_player_view);
         tickerTextView = findViewById(R.id.tickerTextView);
         newsZoneTextView = findViewById(R.id.news_zone);
-        FirebaseMessaging.getInstance().getToken()
-                .addOnCompleteListener(task -> {
-                    if (!task.isSuccessful()) {
-                        return;
-                    }
-                    token = task.getResult();
-                    startConditionalWorkChain(getBaseContext());
-                });
 
     }
 
@@ -183,17 +188,9 @@ public class MainActivity extends AppCompatActivity {
     public void onPostResume(){
         super.onPostResume();
     }
-    public void setNewsTicker() {
-        StringBuilder newsTicker = new StringBuilder("श्रेयसच्या नेतृत्वात इंडियाचा फायनलमध्ये 2 विकेट्सने विजय, कांगारुंना लोळवत मालिका जिंकली");
-        int spaceCount = 285;
-        if(newsTicker.length() < spaceCount) {
-            spaceCount = spaceCount - newsTicker.length();
-            for(int i=0;i<=spaceCount;i++){
-                newsTicker.append(" ");
-            }
-        }
+    public void setNewsTicker(String ticker) {
         tickerTextView.setSelected(true);
-        tickerTextView.setText(newsTicker);
+        tickerTextView.setText(ticker);
     }
     public void resetVideoView() {
         videoView.stopPlayback();
@@ -298,10 +295,14 @@ public class MainActivity extends AppCompatActivity {
         OneTimeWorkRequest downloadStatusWorker = new OneTimeWorkRequest.Builder(DownloadStatusCheckerWorker.class)
                 .setInputData(inputData).build();
 
+        OneTimeWorkRequest tickerWorker = new OneTimeWorkRequest.Builder(TickerWorker.class)
+                .setInputData(inputData).build();
+
         // Enqueue the chain of workers
         WorkManager.getInstance(context)
                 .beginWith(deviceDetailsRequest)
                 .then(deviceTokenRequest)
+                .then(tickerWorker)
                 .then(videoSyncRequest)
                 .then(multiVideoDownloadRequest)
                 .then(downloadStatusWorker)
@@ -311,6 +312,7 @@ public class MainActivity extends AppCompatActivity {
         listenVideoSyncDetails(videoSyncRequest);
         listenMultiVideoDownloader(multiVideoDownloadRequest, context);
         listenAllVideoDownloaderStatus(downloadStatusWorker);
+        listenForTicker(tickerWorker);
 
     }
 
@@ -333,6 +335,19 @@ public class MainActivity extends AppCompatActivity {
 
         listenVideoSyncDetails(videoSyncRequest);
 
+    }
+
+    private void fetchTickerData(String orgId) {
+        Data inputData = new Data.Builder()
+                .putString("HOST", host)
+                .putString("orgId", orgId)
+                .build();
+        // Create the individual work requests
+        OneTimeWorkRequest tickerRequest = new OneTimeWorkRequest.Builder(TickerWorker.class)
+                .setInputData(inputData).build();
+        WorkManager.getInstance(getBaseContext())
+                .beginWith(tickerRequest)
+                .enqueue();
     }
 
     private void listenDeviceDetails(OneTimeWorkRequest deviceDetailsRequest){
@@ -394,5 +409,23 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
     }
+
+    private void listenForTicker(OneTimeWorkRequest tickerWorker){
+        WorkManager.getInstance(getApplicationContext())
+                .getWorkInfoByIdLiveData(tickerWorker.getId())
+                .observe(this, workInfo -> {
+                    if (workInfo != null) {
+                        if (workInfo.getState() == WorkInfo.State.SUCCEEDED) {
+                            Data outputData = workInfo.getOutputData();
+                            String ticker = outputData.getString("ticker");
+                            if(ticker !=null && !ticker.isEmpty()) {
+                                setNewsTicker(ticker);
+                            }
+                        }
+                    }
+                });
+
+    }
+
 
 }
