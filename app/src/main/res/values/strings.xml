@@ -2,6 +2,7 @@
     <string name="app_name">Airstream</string>
     <string name="play_video">Play Video</string>
     <string name="news_zone">NEWS ZONE</string>
+    <string name="news_live">LIVE ZONE</string>
     <string name="host_path">https://api.airstreams.net</string>
 <!--    <string name="host_path">http://192.168.29.192:8080</string>-->
 <!--    <string name="host_path">http://192.168.1.5:8080</string>-->

@@ -86,6 +86,7 @@ public class MainActivity extends AppCompatActivity {
                 case "UPLOAD_VIDEOS":
                 case "UPDATE_VIDEOS":
                 case "LIVE_URL_START":
+                case "LIVE_URL_STOP":
                     startConditionalWorkChain(getBaseContext());
                     break;
                 case "DELETE_VIDEO":
@@ -95,13 +96,6 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case "PLAY_ALL":
                     playAllVideo(DEVICE_BOOT);
-                    break;
-                case "PLAY_LIVE_URL":
-                    String liveUrl = Objects.requireNonNull(intent.getExtras()).getString(PLAY_LIVE_URL.name());
-                    playLiveUrl(liveUrl);
-                    break;
-                case "LIVE_URL_STOP":
-                    stopLiveUrl();
                     break;
 
             }
@@ -136,20 +130,6 @@ public class MainActivity extends AppCompatActivity {
                 });
 
 
-    }
-
-    @NonNull
-    private static Animation getAnimation() {
-        Animation mAnimation = new TranslateAnimation(
-                Animation.RELATIVE_TO_SELF, 1.0f, // Start off-screen right
-                Animation.RELATIVE_TO_SELF, -1.0f, // End off-screen left
-                Animation.RELATIVE_TO_SELF, 0.0f,
-                Animation.RELATIVE_TO_SELF, 0.0f
-        );
-        mAnimation.setDuration(22000); // Adjust this value to control speed (shorter duration = faster)
-        mAnimation.setRepeatMode(Animation.RESTART);
-        mAnimation.setRepeatCount(Animation.INFINITE);
-        return mAnimation;
     }
 
     @Override
@@ -200,7 +180,10 @@ public class MainActivity extends AppCompatActivity {
         this.videoView.setOnCompletionListener(mp -> {});
     }
     public void playAllVideo(Event event) {
-        videoView.setVisibility(VISIBLE);
+        if(videoView.getVisibility() == GONE) {
+            stopLiveUrl();
+            videoView.setVisibility(VISIBLE);
+        }
         // Show WebView
         File videoDir= this.getBaseContext().getExternalFilesDir("airstream");
         if(null != videoDir && videoDir.listFiles() != null && Objects.requireNonNull(videoDir.listFiles()).length > 0) {
@@ -239,20 +222,18 @@ public class MainActivity extends AppCompatActivity {
         urlPlayerId = uri.getQueryParameter("v");
         videoView.stopPlayback(); // Stop video playback
         videoView.setVisibility(GONE);
-        newsZoneTextView.setVisibility(GONE);
         tickerTextView.setVisibility(GONE);
+        newsZoneTextView.setText(R.string.news_live);
         youTubePlayerView.setVisibility(VISIBLE);
         youTubePlayerView.getYouTubePlayerWhenReady(youTubePlayer -> youTubePlayer.loadVideo(urlPlayerId,0));
 
     }
 
     public void stopLiveUrl() {
+        tickerTextView.setVisibility(VISIBLE);
+        newsZoneTextView.setText(R.string.news_zone);
         youTubePlayerView.setVisibility(GONE);
         videoView.setVisibility(VISIBLE);
-        newsZoneTextView.setVisibility(VISIBLE);
-        tickerTextView.setVisibility(VISIBLE);
-        videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
-        videoView.start();
     }
 
     public String getSerialNumber() {
@@ -358,8 +339,12 @@ public class MainActivity extends AppCompatActivity {
                         if (workInfo.getState() == WorkInfo.State.FAILED) {
                             Data outputData = workInfo.getOutputData();
                             String failureResult = outputData.getString("device_not_registered");
+                            String liveUrl = outputData.getString("live_url");
                             if(failureResult !=null) {
                                 Toast.makeText(getBaseContext(), "Device is not registered", Toast.LENGTH_LONG).show();
+                            }
+                            if(liveUrl !=null) {
+                                playLiveUrl(liveUrl);
                             }
                         }
                     }

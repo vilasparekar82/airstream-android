@@ -32,6 +32,12 @@ public class DeviceDetailsWorker extends Worker {
             if (response.isSuccessful()) {
                 Device device = response.body();
                 if(null != device && null != device.getDeviceId()) {
+                    if(device.getLiveUrlPath() != null) {
+                        Data outputDataLiveUrl = new Data.Builder()
+                                .putString("live_url", device.getLiveUrlPath())
+                                .build();
+                        return Result.failure(outputDataLiveUrl);
+                    }
                     Gson gson = new Gson();
                     String jsonResult = gson.toJson(device);
                     outputData = new Data.Builder()
