@@ -50,6 +50,7 @@ import com.video.airstream.worker.DeviceDetailsWorker;
 import com.video.airstream.worker.DeviceFireBaseTokenWorker;
 import com.video.airstream.worker.DownloadStatusCheckerWorker;
 import com.video.airstream.worker.MultiVideosDownloadWorker;
+import com.video.airstream.worker.PingWorker;
 import com.video.airstream.worker.SyncVideosWorker;
 import com.video.airstream.worker.TickerWorker;
 
@@ -57,6 +58,9 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.Objects;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -161,6 +165,7 @@ public class MainActivity extends AppCompatActivity {
         youTubePlayerView = findViewById(R.id.youtube_player_view);
         tickerTextView = findViewById(R.id.tickerTextView);
         newsZoneTextView = findViewById(R.id.news_zone);
+        pingServer();
 
     }
 
@@ -294,6 +299,24 @@ public class MainActivity extends AppCompatActivity {
         listenMultiVideoDownloader(multiVideoDownloadRequest, context);
         listenAllVideoDownloaderStatus(downloadStatusWorker);
         listenForTicker(tickerWorker);
+
+    }
+
+    private void pingServer(){
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                Data inputData = new Data.Builder()
+                        .putString("HOST", host)
+                        .putString("DEVICE_MAC_ID", deviceNumber)
+                        .build();
+                OneTimeWorkRequest initialPingWorkRequest = new OneTimeWorkRequest.Builder(PingWorker.class)
+                        .setInitialDelay(2, TimeUnit.MINUTES)
+                        .setInputData(inputData)
+                        .build();
+                WorkManager.getInstance(getApplicationContext()).enqueue(initialPingWorkRequest);
+            }
+        }, 60000,120000);
 
     }
 

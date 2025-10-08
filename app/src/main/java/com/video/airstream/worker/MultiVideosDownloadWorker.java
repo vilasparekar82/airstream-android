@@ -15,7 +15,9 @@ import com.video.airstream.modal.Device;
 import com.video.airstream.modal.VideoData;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Predicate;
 
@@ -29,6 +31,7 @@ public class MultiVideosDownloadWorker extends Worker {
     public Result doWork() {
         Data inputData = getInputData();
         String deviceJson = inputData.getString("device_details");
+        List<Long> downloadIds = new ArrayList<>();
         if (TextUtils.isEmpty(deviceJson)) {
             return Result.failure();
         } else {
@@ -52,7 +55,8 @@ public class MultiVideosDownloadWorker extends Worker {
                             .setRequiresCharging(false)
                             .setAllowedOverMetered(true)
                             .setAllowedOverRoaming(true);
-                    downloadManager.enqueue(request);
+                    long downloadId = downloadManager.enqueue(request);
+                    downloadIds.add(downloadId);
                 });
             } else {
                 Data outputDataFailure = new Data.Builder()
@@ -61,7 +65,12 @@ public class MultiVideosDownloadWorker extends Worker {
                 return Result.failure(outputDataFailure);
             }
         }
-        return Result.success();
+        Gson gson = new Gson();
+        String downloadIdsString = gson.toJson(downloadIds);
+        Data outputDataDownloadIds = new Data.Builder()
+                .putString("videos_download_ids", downloadIdsString)
+                .build();
+        return Result.success(outputDataDownloadIds);
     }
 
     @NonNull
