@@ -10,6 +10,7 @@ import static com.video.airstream.modal.Event.LIVE_URL_STOP;
 import static com.video.airstream.modal.Event.LOG_DETAILS;
 import static com.video.airstream.modal.Event.PLAY_ALL;
 import static com.video.airstream.modal.Event.PLAY_LIVE_URL;
+import static com.video.airstream.modal.Event.TICKER_UPDATED;
 import static com.video.airstream.modal.Event.UPDATE_VIDEOS;
 import static com.video.airstream.modal.Event.UPLOAD_VIDEOS;
 
@@ -78,6 +79,8 @@ public class MainActivity extends AppCompatActivity {
     String host;
     String downloadPath;
 
+    Device device;
+
 
     public BroadcastReceiver myReceiver = new BroadcastReceiver() {
         @Override
@@ -97,6 +100,9 @@ public class MainActivity extends AppCompatActivity {
                 case "DELETE_ALL_VIDEOS":
                     startDeletingVideos(getBaseContext());
                     resetVideoView();
+                    break;
+                case "TICKER_UPDATED":
+                    fetchTickerData();
                     break;
                 case "PLAY_ALL":
                     playAllVideo(DEVICE_BOOT);
@@ -120,6 +126,7 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(myReceiver, new IntentFilter(PLAY_LIVE_URL.name()));
         registerReceiver(myReceiver, new IntentFilter(LIVE_URL_START.name()));
         registerReceiver(myReceiver, new IntentFilter(LIVE_URL_STOP.name()));
+        registerReceiver(myReceiver, new IntentFilter(TICKER_UPDATED.name()));
         this.videoView.setVisibility(VISIBLE);
         this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
         this.videoView.start();
@@ -341,17 +348,20 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private void fetchTickerData(String orgId) {
-        Data inputData = new Data.Builder()
-                .putString("HOST", host)
-                .putString("orgId", orgId)
-                .build();
-        // Create the individual work requests
-        OneTimeWorkRequest tickerRequest = new OneTimeWorkRequest.Builder(TickerWorker.class)
-                .setInputData(inputData).build();
-        WorkManager.getInstance(getBaseContext())
-                .beginWith(tickerRequest)
-                .enqueue();
+    private void fetchTickerData() {
+        if(device != null && device.getDeviceOwner() != null && device.getDeviceOwner().getOrganization() != null) {
+            Data inputData = new Data.Builder()
+                    .putString("HOST", host)
+                    .putString("orgId", device.getDeviceOwner().getOrganization().getOrganizationId().toString())
+                    .build();
+            // Create the individual work requests
+            OneTimeWorkRequest tickerRequest = new OneTimeWorkRequest.Builder(TickerWorker.class)
+                    .setInputData(inputData).build();
+            WorkManager.getInstance(getBaseContext())
+                    .beginWith(tickerRequest)
+                    .enqueue();
+            listenForTicker(tickerRequest);
+        }
     }
 
     private void listenDeviceDetails(OneTimeWorkRequest deviceDetailsRequest){
@@ -369,6 +379,12 @@ public class MainActivity extends AppCompatActivity {
                             if(liveUrl !=null) {
                                 playLiveUrl(liveUrl);
                             }
+                        }
+                        if (workInfo.getState() == WorkInfo.State.SUCCEEDED) {
+                            Data outputData = workInfo.getOutputData();
+                            String deviceJson = outputData.getString("device_details");
+                            Gson gson = new Gson();
+                            device = gson.fromJson(deviceJson, Device.class);
                         }
                     }
                 });

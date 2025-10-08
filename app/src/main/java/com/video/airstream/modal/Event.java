@@ -11,5 +11,7 @@ public enum Event {
     LIVE_URL_START,
 
     LIVE_URL_STOP,
-    PLAY_LIVE_URL
+    PLAY_LIVE_URL,
+
+    TICKER_UPDATED
 }
