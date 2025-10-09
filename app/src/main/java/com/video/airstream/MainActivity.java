@@ -22,6 +22,7 @@ import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.animation.Animation;
 import android.view.animation.TranslateAnimation;
@@ -31,6 +32,7 @@ import android.widget.VideoView;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -81,6 +83,8 @@ public class MainActivity extends AppCompatActivity {
 
     Device device;
 
+    private Timer myPingTimer;
+
 
     public BroadcastReceiver myReceiver = new BroadcastReceiver() {
         @Override
@@ -113,20 +117,21 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     @Override
     protected void onStart() {
         super.onStart();
-        registerReceiver(myReceiver, new IntentFilter(UPDATE_VIDEOS.name()));
-        registerReceiver(myReceiver, new IntentFilter(UPLOAD_VIDEOS.name()));
-        registerReceiver(myReceiver, new IntentFilter(DELETE_VIDEO.name()));
-        registerReceiver(myReceiver, new IntentFilter(DELETE_ALL_VIDEOS.name()));
-        registerReceiver(myReceiver, new IntentFilter(LOG_DETAILS.name()));
-        registerReceiver(myReceiver, new IntentFilter(PLAY_ALL.name()));
-        registerReceiver(myReceiver, new IntentFilter(PLAY_LIVE_URL.name()));
-        registerReceiver(myReceiver, new IntentFilter(LIVE_URL_START.name()));
-        registerReceiver(myReceiver, new IntentFilter(LIVE_URL_STOP.name()));
-        registerReceiver(myReceiver, new IntentFilter(TICKER_UPDATED.name()));
+        registerReceiver(myReceiver, new IntentFilter(UPDATE_VIDEOS.name()),Context.RECEIVER_EXPORTED);
+        registerReceiver(myReceiver, new IntentFilter(UPLOAD_VIDEOS.name()),Context.RECEIVER_EXPORTED);
+        registerReceiver(myReceiver, new IntentFilter(DELETE_VIDEO.name()),Context.RECEIVER_EXPORTED);
+        registerReceiver(myReceiver, new IntentFilter(DELETE_ALL_VIDEOS.name()),Context.RECEIVER_EXPORTED);
+        registerReceiver(myReceiver, new IntentFilter(LOG_DETAILS.name()),Context.RECEIVER_EXPORTED);
+        registerReceiver(myReceiver, new IntentFilter(PLAY_ALL.name()),Context.RECEIVER_EXPORTED);
+        registerReceiver(myReceiver, new IntentFilter(PLAY_LIVE_URL.name()),Context.RECEIVER_EXPORTED);
+        registerReceiver(myReceiver, new IntentFilter(LIVE_URL_START.name()),Context.RECEIVER_EXPORTED);
+        registerReceiver(myReceiver, new IntentFilter(LIVE_URL_STOP.name()),Context.RECEIVER_EXPORTED);
+        registerReceiver(myReceiver, new IntentFilter(TICKER_UPDATED.name()),Context.RECEIVER_EXPORTED);
         this.videoView.setVisibility(VISIBLE);
         this.videoView.setVideoPath("android.resource://" + getPackageName() + "/" + R.raw.welcomevideo);
         this.videoView.start();
@@ -140,19 +145,26 @@ public class MainActivity extends AppCompatActivity {
                     startConditionalWorkChain(getBaseContext());
                 });
 
-
+        pingServer();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
         this.videoView.stopPlayback();
+        if (myPingTimer != null) {
+            myPingTimer.cancel();
+        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         unregisterReceiver(myReceiver);
+        if (myPingTimer != null) {
+            myPingTimer.cancel(); // Cancel the timer when the activity is destroyed
+            myPingTimer = null;
+        }
     }
 
     @Override
@@ -172,7 +184,7 @@ public class MainActivity extends AppCompatActivity {
         youTubePlayerView = findViewById(R.id.youtube_player_view);
         tickerTextView = findViewById(R.id.tickerTextView);
         newsZoneTextView = findViewById(R.id.news_zone);
-        pingServer();
+        myPingTimer = new Timer();
 
     }
 
@@ -248,20 +260,11 @@ public class MainActivity extends AppCompatActivity {
         videoView.setVisibility(VISIBLE);
     }
 
+    @SuppressLint("HardwareIds")
     public String getSerialNumber() {
         String serialNumber;
         try {
-            Class<?> c = Class.forName("android.os.SystemProperties");
-            Method get = c.getMethod("get", String.class);
-            serialNumber = (String) get.invoke(c, "gsm.sn1");
-            if (serialNumber != null && serialNumber.isEmpty())
-                serialNumber = (String) get.invoke(c, "ril.serialnumber");
-            if (serialNumber != null && serialNumber.isEmpty())
-                serialNumber = (String) get.invoke(c, "ro.serialno");
-            if (serialNumber != null && serialNumber.isEmpty())
-                serialNumber = (String) get.invoke(c, "sys.serialnumber");
-            if (serialNumber != null && serialNumber.isEmpty())
-                serialNumber = Build.getSerial();
+            serialNumber = Settings.Secure.getString(getBaseContext().getContentResolver(), Settings.Secure.ANDROID_ID);
         } catch (Exception e) {
             serialNumber = null;
         }
@@ -310,7 +313,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void pingServer(){
-        new Timer().schedule(new TimerTask() {
+        myPingTimer.schedule(new TimerTask() {
             @Override
             public void run() {
                 Data inputData = new Data.Builder()
